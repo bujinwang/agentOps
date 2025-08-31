@@ -1,6 +1,6 @@
-// Validation utilities for forms and input data
+// Enhanced validation utilities with task validation
 
-import { LoginForm, RegisterForm, LeadForm } from '../types';
+import { LoginForm, RegisterForm, LeadForm, TaskForm } from '../types';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -118,6 +118,29 @@ export const rules = {
     },
   }),
 
+  dateFormat: (message = 'Please enter a valid date (YYYY-MM-DD)'): ValidationRule => ({
+    validate: (value: string) => {
+      if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return message;
+      }
+      return null;
+    },
+  }),
+
+  futureDate: (message = 'Date must be in the future'): ValidationRule => ({
+    validate: (value: string) => {
+      if (value) {
+        const inputDate = new Date(value);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (inputDate < today) {
+          return message;
+        }
+      }
+      return null;
+    },
+  }),
+
   custom: (validateFn: (value: any, allData?: Record<string, any>) => string | null): ValidationRule => ({
     validate: validateFn,
   }),
@@ -182,6 +205,36 @@ export const validateLeadForm = (data: LeadForm): ValidationResult => {
   return validate(data, validationRules);
 };
 
+export const validateTaskForm = (data: TaskForm): ValidationResult => {
+  const validationRules: Record<string, ValidationRule[]> = {
+    title: [rules.required(), rules.maxLength(255)],
+    priority: [rules.required()],
+  };
+
+  // Optional field validations
+  if (data.description) {
+    validationRules.description = [rules.maxLength(1000)];
+  }
+
+  if (data.dueDate) {
+    validationRules.dueDate = [
+      rules.custom((value: string) => {
+        try {
+          const date = new Date(value);
+          if (isNaN(date.getTime())) {
+            return 'Please enter a valid date';
+          }
+          return null;
+        } catch {
+          return 'Please enter a valid date';
+        }
+      }),
+    ];
+  }
+
+  return validate(data, validationRules);
+};
+
 // Format validation errors for display
 export const getErrorMessage = (
   errors: Record<string, string>,
@@ -228,4 +281,71 @@ export const formatCurrency = (amount: number | string): string => {
 // Parse currency input
 export const parseCurrency = (value: string): string => {
   return value.replace(/[$,\s]/g, '');
+};
+
+// Format date for display
+export const formatDate = (date: string | Date): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+// Format date and time for display
+export const formatDateTime = (date: string | Date): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+// Get relative time (e.g., "2 hours ago", "3 days ago")
+export const getRelativeTime = (date: string | Date): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - d.getTime()) / 1000);
+
+  if (diffInSeconds < 60) {
+    return 'Just now';
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  } else if (diffInSeconds < 2592000) {
+    const days = Math.floor(diffInSeconds / 86400);
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+  } else {
+    return formatDate(d);
+  }
+};
+
+// Validate and format URL
+export const validateUrl = (url: string): string | null => {
+  try {
+    const validUrl = new URL(url);
+    return validUrl.href;
+  } catch {
+    try {
+      // Try adding https:// prefix
+      const validUrl = new URL(`https://${url}`);
+      return validUrl.href;
+    } catch {
+      return null;
+    }
+  }
+};
+
+// Generate initials from name
+export const getInitials = (firstName?: string, lastName?: string): string => {
+  const first = firstName?.charAt(0)?.toUpperCase() || '';
+  const last = lastName?.charAt(0)?.toUpperCase() || '';
+  return `${first}${last}` || '?';
 };

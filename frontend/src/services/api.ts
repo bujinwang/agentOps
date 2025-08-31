@@ -1,4 +1,4 @@
-// API service layer for communicating with n8n backend
+// Enhanced API service layer with comprehensive endpoints
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -11,6 +11,9 @@ import {
   LeadForm,
   Lead,
   LeadListParams,
+  Task,
+  TaskForm,
+  Interaction,
 } from '../types';
 
 // Configuration
@@ -200,9 +203,18 @@ class ApiService {
     });
   }
 
-  // Tasks endpoints (for future implementation)
-  async getTasks(params?: any): Promise<any> {
-    const searchParams = new URLSearchParams(params);
+  // Tasks endpoints
+  async getTasks(params?: any): Promise<{ data: Task[] }> {
+    const searchParams = new URLSearchParams();
+    
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, value.toString());
+        }
+      });
+    }
+
     const queryString = searchParams.toString();
     const endpoint = `/webhook/tasks${queryString ? `?${queryString}` : ''}`;
 
@@ -211,31 +223,247 @@ class ApiService {
     });
   }
 
-  async createTask(taskData: any): Promise<any> {
+  async getTask(taskId: number): Promise<{ data: Task }> {
+    return this.request(`/webhook/tasks/${taskId}`, {
+      method: 'GET',
+    });
+  }
+
+  async createTask(taskData: TaskForm): Promise<ApiResponse<Task>> {
     return this.request('/webhook/tasks', {
       method: 'POST',
       body: JSON.stringify(taskData),
     });
   }
 
-  async updateTask(taskId: number, taskData: any): Promise<any> {
+  async updateTask(taskId: number, taskData: Partial<Task>): Promise<ApiResponse<Task>> {
     return this.request(`/webhook/tasks/${taskId}`, {
       method: 'PUT',
       body: JSON.stringify(taskData),
     });
   }
 
-  // Interactions endpoints (for future implementation)
-  async getLeadInteractions(leadId: number): Promise<any> {
+  async deleteTask(taskId: number): Promise<ApiResponse> {
+    return this.request(`/webhook/tasks/${taskId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Interactions endpoints
+  async getLeadInteractions(leadId: number): Promise<{ data: Interaction[] }> {
     return this.request(`/webhook/leads/${leadId}/interactions`, {
       method: 'GET',
     });
   }
 
-  async addInteraction(interactionData: any): Promise<any> {
+  async addInteraction(interactionData: {
+    leadId: number;
+    type: string;
+    content?: string;
+  }): Promise<ApiResponse<Interaction>> {
     return this.request('/webhook/interactions', {
       method: 'POST',
       body: JSON.stringify(interactionData),
+    });
+  }
+
+  async getInteractions(params?: {
+    leadId?: number;
+    type?: string;
+    limit?: number;
+    page?: number;
+  }): Promise<{ data: Interaction[] }> {
+    const searchParams = new URLSearchParams();
+    
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/webhook/interactions${queryString ? `?${queryString}` : ''}`;
+
+    return this.request(endpoint, {
+      method: 'GET',
+    });
+  }
+
+  // Analytics endpoints
+  async getDashboardStats(): Promise<{
+    data: {
+      totalLeads: number;
+      newLeads: number;
+      activeTasks: number;
+      completedTasks: number;
+      leadsThisMonth: number;
+      conversionRate: number;
+      recentActivity: Interaction[];
+    };
+  }> {
+    return this.request('/webhook/analytics/dashboard', {
+      method: 'GET',
+    });
+  }
+
+  async getLeadStats(timeframe: 'week' | 'month' | 'quarter' = 'month'): Promise<{
+    data: {
+      leadsByStatus: Array<{ status: string; count: number }>;
+      leadsBySource: Array<{ source: string; count: number }>;
+      leadsByPriority: Array<{ priority: string; count: number }>;
+      leadsOverTime: Array<{ date: string; count: number }>;
+    };
+  }> {
+    return this.request(`/webhook/analytics/leads?timeframe=${timeframe}`, {
+      method: 'GET',
+    });
+  }
+
+  // Search endpoints
+  async searchLeads(query: string, filters?: {
+    status?: string;
+    priority?: string;
+    source?: string;
+  }): Promise<{ data: Lead[] }> {
+    const searchParams = new URLSearchParams({ q: query });
+    
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, value);
+        }
+      });
+    }
+
+    return this.request(`/webhook/search/leads?${searchParams.toString()}`, {
+      method: 'GET',
+    });
+  }
+
+  async searchTasks(query: string, filters?: {
+    completed?: boolean;
+    priority?: string;
+    leadId?: number;
+  }): Promise<{ data: Task[] }> {
+    const searchParams = new URLSearchParams({ q: query });
+    
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, value.toString());
+        }
+      });
+    }
+
+    return this.request(`/webhook/search/tasks?${searchParams.toString()}`, {
+      method: 'GET',
+    });
+  }
+
+  // Export/Import endpoints
+  async exportLeads(format: 'csv' | 'excel' = 'csv', filters?: any): Promise<Blob> {
+    const searchParams = new URLSearchParams({ format });
+    
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const response = await fetch(`${this.baseURL}/webhook/leads/export?${searchParams.toString()}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${await this.getToken()}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Export failed');
+    }
+
+    return response.blob();
+  }
+
+  async importLeads(file: File | FormData): Promise<ApiResponse<{
+    imported: number;
+    failed: number;
+    errors: string[];
+  }>> {
+    const formData = file instanceof FormData ? file : new FormData();
+    if (!(file instanceof FormData)) {
+      formData.append('file', file);
+    }
+
+    return this.request('/webhook/leads/import', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        // Don't set Content-Type for FormData - let the browser set it
+        Authorization: `Bearer ${await this.getToken()}`,
+      },
+    });
+  }
+
+  // Notification endpoints
+  async getNotifications(params?: {
+    read?: boolean;
+    type?: string;
+    limit?: number;
+  }): Promise<{ data: any[] }> {
+    const searchParams = new URLSearchParams();
+    
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/webhook/notifications${queryString ? `?${queryString}` : ''}`;
+
+    return this.request(endpoint, {
+      method: 'GET',
+    });
+  }
+
+  async markNotificationRead(notificationId: number): Promise<ApiResponse> {
+    return this.request(`/webhook/notifications/${notificationId}/read`, {
+      method: 'PUT',
+    });
+  }
+
+  async markAllNotificationsRead(): Promise<ApiResponse> {
+    return this.request('/webhook/notifications/mark-all-read', {
+      method: 'PUT',
+    });
+  }
+
+  // User profile endpoints
+  async updateProfile(profileData: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    preferences?: any;
+  }): Promise<ApiResponse> {
+    return this.request('/webhook/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profileData),
+    });
+  }
+
+  async changePassword(passwordData: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<ApiResponse> {
+    return this.request('/webhook/auth/change-password', {
+      method: 'PUT',
+      body: JSON.stringify(passwordData),
     });
   }
 
@@ -243,6 +471,23 @@ class ApiService {
   async healthCheck(): Promise<{ status: string }> {
     return this.request('/webhook/health', {
       method: 'GET',
+    });
+  }
+
+  // File upload endpoint
+  async uploadFile(file: File, type: 'avatar' | 'document' = 'document'): Promise<{
+    data: { url: string; filename: string; size: number };
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', type);
+
+    return this.request('/webhook/files/upload', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        Authorization: `Bearer ${await this.getToken()}`,
+      },
     });
   }
 }
