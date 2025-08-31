@@ -1,0 +1,215 @@
+{
+  "name": "Get Lead Detail API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "/leads/{{$parameter.leadId}}",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "leaddetail-webhook-001",
+      "name": "Webhook Get Lead Detail",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// JWT Authentication and extract lead ID from path\nconst authHeader = items[0].json.headers?.authorization || items[0].json.request?.headers?.authorization;\nconst leadId = items[0].json.params?.leadId || items[0].json.path?.split('/').pop();\n\nif (!authHeader || !authHeader.startsWith('Bearer ')) {\n  return { error: 'Missing token', authenticated: false };\n}\n\nif (!leadId) {\n  return { error: 'Lead ID required', authenticated: false };\n}\n\nconst jwt = require('jsonwebtoken');\nconst JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';\nconst token = authHeader.split(' ')[1];\n\ntry {\n  const decoded = jwt.verify(token, JWT_SECRET);\n  return {\n    ...items[0].json,\n    isAuthenticated: true,\n    authUserId: decoded.userId,\n    authUserEmail: decoded.email,\n    leadId: leadId\n  };\n} catch (err) {\n  return { isAuthenticated: false, error: err.message };\n}"
+      },
+      "id": "leaddetail-auth-001",
+      "name": "JWT Auth & Extract ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isAuthenticated}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "leaddetail-authcheck-001",
+      "name": "Auth Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Unauthorized\"}",
+        "options": {
+          "responseCode": "401"
+        }
+      },
+      "id": "leaddetail-unauth-001",
+      "name": "Unauthorized Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM leads WHERE lead_id = {{$json.leadId}} AND user_id = {{$json.authUserId}}",
+        "options": {}
+      },
+      "id": "leaddetail-query-001",
+      "name": "Get Lead Detail",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [900, 400],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Real Estate CRM Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.length}}",
+              "value2": 0,
+              "operation": "larger"
+            }
+          ]
+        }
+      },
+      "id": "leaddetail-found-001",
+      "name": "Lead Found Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Lead not found or access denied\"}",
+        "options": {
+          "responseCode": "404"
+        }
+      },
+      "id": "leaddetail-notfound-001",
+      "name": "Lead Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format lead detail response\nconst lead = items[0].json;\n\nconst formattedLead = {\n  leadId: lead.lead_id,\n  userId: lead.user_id,\n  firstName: lead.first_name,\n  lastName: lead.last_name,\n  email: lead.email,\n  phoneNumber: lead.phone_number,\n  source: lead.source,\n  status: lead.status,\n  priority: lead.priority,\n  budgetMin: lead.budget_min,\n  budgetMax: lead.budget_max,\n  desiredLocation: lead.desired_location,\n  propertyType: lead.property_type,\n  bedroomsMin: lead.bedrooms_min,\n  bathroomsMin: lead.bathrooms_min,\n  notes: lead.notes,\n  aiSummary: lead.ai_summary,\n  lastContactedAt: lead.last_contacted_at,\n  followUpDate: lead.follow_up_date,\n  createdAt: lead.created_at,\n  updatedAt: lead.updated_at\n};\n\nreturn {\n  message: \"Lead details retrieved successfully\",\n  data: formattedLead\n};"
+      },
+      "id": "leaddetail-format-001",
+      "name": "Format Lead Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}",
+        "options": {
+          "responseCode": "200"
+        }
+      },
+      "id": "leaddetail-response-001",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Get Lead Detail": {
+      "main": [
+        [
+          {
+            "node": "JWT Auth & Extract ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JWT Auth & Extract ID": {
+      "main": [
+        [
+          {
+            "node": "Auth Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check": {
+      "main": [
+        [
+          {
+            "node": "Get Lead Detail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unauthorized Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead Detail": {
+      "main": [
+        [
+          {
+            "node": "Lead Found Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Found Check": {
+      "main": [
+        [
+          {
+            "node": "Format Lead Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lead Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Lead Response": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

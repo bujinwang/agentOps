@@ -1,0 +1,337 @@
+{
+  "name": "Create Lead API with AI Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/leads",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "lead-webhook-001",
+      "name": "Webhook Create Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract JWT token from Authorization header\nconst authHeader = items[0].json.headers?.authorization || items[0].json.request?.headers?.authorization;\n\nif (!authHeader || !authHeader.startsWith('Bearer ')) {\n  return {\n    error: 'Missing or malformed token',\n    authenticated: false,\n    statusCode: 401\n  };\n}\n\nconst token = authHeader.split(' ')[1];\nreturn { ...items[0].json, token: token, hasToken: true };"
+      },
+      "id": "lead-auth-001",
+      "name": "JWT Authentication",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const jwt = require('jsonwebtoken');\nconst JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';\n\nif (!items[0].json.hasToken) {\n  return { isAuthenticated: false, error: 'No token provided' };\n}\n\ntry {\n  const decoded = jwt.verify(items[0].json.token, JWT_SECRET);\n  return {\n    ...items[0].json,\n    decodedToken: decoded,\n    isAuthenticated: true,\n    authUserId: decoded.userId,\n    authUserEmail: decoded.email\n  };\n} catch (err) {\n  return { isAuthenticated: false, error: err.message };\n}"
+      },
+      "id": "lead-verify-001",
+      "name": "Verify JWT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isAuthenticated}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "lead-authcheck-001",
+      "name": "Auth Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Unauthorized\"}",
+        "options": {
+          "responseCode": "401"
+        }
+      },
+      "id": "lead-unauth-001",
+      "name": "Unauthorized Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.firstName}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.lastName}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.email}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.source}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "lead-validate-001",
+      "name": "Validate Lead Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Missing required fields: firstName, lastName, email, source\"}",
+        "options": {
+          "responseCode": "400"
+        }
+      },
+      "id": "lead-valerr-001",
+      "name": "Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for AI analysis\nconst leadData = items[0].json.body;\n\n// Create a summary of lead requirements for AI processing\nconst leadSummary = [];\nif (leadData.budgetMin || leadData.budgetMax) {\n  leadSummary.push(`Budget: $${leadData.budgetMin || 'flexible'} - $${leadData.budgetMax || 'flexible'}`);\n}\nif (leadData.desiredLocation) {\n  leadSummary.push(`Location: ${leadData.desiredLocation}`);\n}\nif (leadData.propertyType) {\n  leadSummary.push(`Property type: ${leadData.propertyType}`);\n}\nif (leadData.bedroomsMin) {\n  leadSummary.push(`Min ${leadData.bedroomsMin} bedrooms`);\n}\nif (leadData.bathroomsMin) {\n  leadSummary.push(`Min ${leadData.bathroomsMin} bathrooms`);\n}\nif (leadData.notes) {\n  leadSummary.push(`Notes: ${leadData.notes}`);\n}\n\nconst aiPrompt = `Analyze this real estate lead and provide:\n1. A brief professional summary (max 2 sentences)\n2. Priority level (High/Medium/Low)\n\nLead: ${leadData.firstName} ${leadData.lastName}\nRequirements: ${leadSummary.join(', ')}\nSource: ${leadData.source}`;\n\nreturn {\n  ...items[0].json,\n  aiPrompt: aiPrompt,\n  leadSummary: leadSummary.join(', ')\n};"
+      },
+      "id": "lead-aiprep-001",
+      "name": "Prepare AI Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "create",
+        "messages": [
+          {
+            "role": "user",
+            "content": "={{$json.aiPrompt}}"
+          }
+        ],
+        "model": "gpt-3.5-turbo",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 150
+        }
+      },
+      "id": "lead-openai-001",
+      "name": "OpenAI Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1560, 400],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process AI response or use defaults\nlet aiSummary = 'Lead analysis pending';\nlet suggestedPriority = 'Medium';\n\nif (items[0].json.choices && items[0].json.choices[0]) {\n  const aiResponse = items[0].json.choices[0].message.content;\n  \n  // Extract summary and priority from AI response\n  const lines = aiResponse.split('\\n').filter(line => line.trim());\n  if (lines.length >= 1) {\n    aiSummary = lines[0].replace(/^\\d+\\.\\s*/, '').trim();\n  }\n  \n  // Look for priority in the response\n  const priorityMatch = aiResponse.match(/(High|Medium|Low)/i);\n  if (priorityMatch) {\n    suggestedPriority = priorityMatch[1];\n  }\n}\n\n// Get the original data\nconst originalData = items[0].json;\nreturn {\n  ...originalData,\n  aiSummary: aiSummary,\n  suggestedPriority: suggestedPriority\n};"
+      },
+      "id": "lead-aiprocess-001",
+      "name": "Process AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO leads (\n  user_id, first_name, last_name, email, phone_number, source, \n  priority, budget_min, budget_max, desired_location, property_type, \n  bedrooms_min, bathrooms_min, notes, ai_summary, \n  created_at, updated_at\n) VALUES (\n  {{$json.authUserId}}, \n  '{{$json.body.firstName}}', \n  '{{$json.body.lastName}}', \n  '{{$json.body.email}}', \n  '{{$json.body.phoneNumber || ''}}', \n  '{{$json.body.source}}', \n  '{{$json.suggestedPriority}}', \n  {{$json.body.budgetMin || 'NULL'}}, \n  {{$json.body.budgetMax || 'NULL'}}, \n  '{{$json.body.desiredLocation || ''}}', \n  '{{$json.body.propertyType || ''}}', \n  {{$json.body.bedroomsMin || 'NULL'}}, \n  {{$json.body.bathroomsMin || 'NULL'}}, \n  '{{$json.body.notes || ''}}', \n  '{{$json.aiSummary}}', \n  NOW(), \n  NOW()\n) RETURNING lead_id",
+        "options": {}
+      },
+      "id": "lead-insert-001",
+      "name": "Insert Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2000, 400],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Real Estate CRM Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO interactions (lead_id, user_id, type, content, interaction_date, created_at) VALUES ({{$node['Insert Lead'].json.lead_id}}, {{$json.authUserId}}, 'Lead Created', 'Lead added via mobile app with AI analysis', NOW(), NOW())",
+        "options": {}
+      },
+      "id": "lead-interaction-001",
+      "name": "Log Interaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2220, 400],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Real Estate CRM Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"message\": \"Lead created successfully\", \"leadId\": {{$node['Insert Lead'].json.lead_id}}, \"aiSummary\": \"{{$json.aiSummary}}\", \"priority\": \"{{$json.suggestedPriority}}\"}",
+        "options": {
+          "responseCode": "201"
+        }
+      },
+      "id": "lead-success-001",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Create Lead": {
+      "main": [
+        [
+          {
+            "node": "JWT Authentication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JWT Authentication": {
+      "main": [
+        [
+          {
+            "node": "Verify JWT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify JWT": {
+      "main": [
+        [
+          {
+            "node": "Auth Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check": {
+      "main": [
+        [
+          {
+            "node": "Validate Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unauthorized Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AI Response": {
+      "main": [
+        [
+          {
+            "node": "Insert Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Lead": {
+      "main": [
+        [
+          {
+            "node": "Log Interaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Interaction": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

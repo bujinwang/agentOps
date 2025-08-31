@@ -1,0 +1,167 @@
+{
+  "name": "JWT Authentication Template",
+  "meta": {
+    "description": "This is a reusable template for JWT authentication that should be included at the beginning of protected workflows"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Extract JWT token from Authorization header\nconst authHeader = items[0].json.headers?.authorization || items[0].json.request?.headers?.authorization;\n\nif (!authHeader || !authHeader.startsWith('Bearer ')) {\n  return {\n    error: 'Missing or malformed token',\n    authenticated: false,\n    statusCode: 401\n  };\n}\n\nconst token = authHeader.split(' ')[1];\nreturn { token: token, hasToken: true };"
+      },
+      "id": "jwt-extract-001",
+      "name": "Extract JWT Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.hasToken}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "jwt-check-001",
+      "name": "Token Present Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Unauthorized: Missing or malformed token\"}",
+        "options": {
+          "responseCode": "401"
+        }
+      },
+      "id": "jwt-notoken-001",
+      "name": "No Token Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const jwt = require('jsonwebtoken');\nconst JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';\n\ntry {\n  const decoded = jwt.verify(items[0].json.token, JWT_SECRET);\n  return {\n    decodedToken: decoded,\n    isAuthenticated: true,\n    userId: decoded.userId,\n    userEmail: decoded.email\n  };\n} catch (err) {\n  return {\n    isAuthenticated: false,\n    error: err.message,\n    statusCode: 401\n  };\n}"
+      },
+      "id": "jwt-verify-001",
+      "name": "Verify JWT Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isAuthenticated}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "jwt-auth-001",
+      "name": "Authentication Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Unauthorized: Invalid or expired token\"}",
+        "options": {
+          "responseCode": "401"
+        }
+      },
+      "id": "jwt-invalid-001",
+      "name": "Invalid Token Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Authentication successful - pass through all data plus auth context\nreturn {\n  ...items[0].json,\n  authUserId: items[0].json.userId,\n  authUserEmail: items[0].json.userEmail,\n  authenticated: true\n};"
+      },
+      "id": "jwt-success-001",
+      "name": "Authentication Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Extract JWT Token": {
+      "main": [
+        [
+          {
+            "node": "Token Present Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token Present Check": {
+      "main": [
+        [
+          {
+            "node": "Verify JWT Token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Token Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify JWT Token": {
+      "main": [
+        [
+          {
+            "node": "Authentication Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authentication Check": {
+      "main": [
+        [
+          {
+            "node": "Authentication Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Token Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "usage_notes": [
+    "1. Copy these nodes to the beginning of any protected workflow",
+    "2. Connect 'Authentication Success' to your main workflow logic",
+    "3. The authUserId will be available as {{$json.authUserId}} in subsequent nodes",
+    "4. Error responses are handled automatically",
+    "5. Make sure JWT_SECRET environment variable is set consistently"
+  ]
+}

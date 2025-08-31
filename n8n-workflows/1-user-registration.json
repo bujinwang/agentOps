@@ -1,0 +1,305 @@
+{
+  "name": "User Registration API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/auth/register",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8d0b6f4b-8f8a-4b8b-8b8b-8b8b8b8b8b8b",
+      "name": "Webhook Registration",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "a8b8c8d8-e8f8-g8h8-i8j8-k8l8m8n8o8p8"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.email}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.password}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.firstName}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.lastName}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "2a1b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Missing required fields: email, password, firstName, lastName\"}",
+        "options": {
+          "responseCode": "400"
+        }
+      },
+      "id": "3b2c4d5e-6f7g-8h9i-0j1k-2l3m4n5o6p7q",
+      "name": "Validation Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate email format\nconst email = items[0].json.body.email;\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(email)) {\n  return { error: 'Invalid email format', valid: false };\n}\n\n// Validate password length\nconst password = items[0].json.body.password;\nif (password.length < 8) {\n  return { error: 'Password must be at least 8 characters long', valid: false };\n}\n\nreturn { valid: true };"
+      },
+      "id": "4c3d5e6f-7g8h-9i0j-1k2l-3m4n5o6p7q8r",
+      "name": "Detailed Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.valid}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "5d4e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s",
+      "name": "Check Validation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"{{$json.error}}\"}",
+        "options": {
+          "responseCode": "400"
+        }
+      },
+      "id": "6e5f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t",
+      "name": "Detail Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 120]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT user_id FROM users WHERE email = '{{$json.body.email}}'",
+        "options": {}
+      },
+      "id": "7f6g8h9i-0j1k-2l3m-4n5o-6p7q8r9s0t1u",
+      "name": "Check Existing User",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Real Estate CRM Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.length}}",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "8g7h9i0j-1k2l-3m4n-5o6p-7q8r9s0t1u2v",
+      "name": "User Exists Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Email already exists\"}",
+        "options": {
+          "responseCode": "409"
+        }
+      },
+      "id": "9h8i0j1k-2l3m-4n5o-6p7q-8r9s0t1u2v3w",
+      "name": "Email Exists Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const bcrypt = require('bcryptjs');\nconst saltRounds = 10;\nconst password = items[0].json.body.password;\nconst hashedPassword = await bcrypt.hash(password, saltRounds);\nreturn { hashedPassword: hashedPassword };"
+      },
+      "id": "0i9j1k2l-3m4n-5o6p-7q8r-9s0t1u2v3w4x",
+      "name": "Hash Password",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO users (email, password_hash, first_name, last_name, updated_at) VALUES ('{{$json.body.email}}', '{{$node[\"Hash Password\"].json.hashedPassword}}', '{{$json.body.firstName}}', '{{$json.body.lastName}}', NOW()) RETURNING user_id",
+        "options": {}
+      },
+      "id": "1j0k2l3m-4n5o-6p7q-8r9s-0t1u2v3w4x5y",
+      "name": "Insert User",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1780, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Real Estate CRM Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"message\": \"User registered successfully\", \"userId\": {{$json.user_id}}}",
+        "options": {
+          "responseCode": "201"
+        }
+      },
+      "id": "2k1l3m4n-5o6p-7q8r-9s0t-1u2v3w4x5y6z",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Registration": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Detailed Validation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detailed Validation": {
+      "main": [
+        [
+          {
+            "node": "Check Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation": {
+      "main": [
+        [
+          {
+            "node": "Check Existing User",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Detail Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing User": {
+      "main": [
+        [
+          {
+            "node": "User Exists Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Exists Check": {
+      "main": [
+        [
+          {
+            "node": "Hash Password",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email Exists Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hash Password": {
+      "main": [
+        [
+          {
+            "node": "Insert User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert User": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

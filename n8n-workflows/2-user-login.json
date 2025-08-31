@@ -1,0 +1,268 @@
+{
+  "name": "User Login API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/auth/login",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "login-webhook-001",
+      "name": "Webhook Login",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.email}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.password}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "login-validate-001",
+      "name": "Validate Login Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Email and password are required\"}",
+        "options": {
+          "responseCode": "400"
+        }
+      },
+      "id": "login-error-001",
+      "name": "Login Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 120]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT user_id, email, password_hash, first_name FROM users WHERE email = '{{$json.body.email}}'",
+        "options": {}
+      },
+      "id": "login-getuser-001",
+      "name": "Get User by Email",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Real Estate CRM Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.length}}",
+              "value2": 0,
+              "operation": "larger"
+            }
+          ]
+        }
+      },
+      "id": "login-userexists-001",
+      "name": "User Found Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Invalid email or password\"}",
+        "options": {
+          "responseCode": "401"
+        }
+      },
+      "id": "login-notfound-001",
+      "name": "User Not Found Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const bcrypt = require('bcryptjs');\nconst password = items[0].json.body.password;\nconst passwordHash = items[0].json.password_hash;\n\ntry {\n  const isMatch = await bcrypt.compare(password, passwordHash);\n  return {\n    isPasswordMatch: isMatch,\n    user_id: items[0].json.user_id,\n    email: items[0].json.email,\n    first_name: items[0].json.first_name\n  };\n} catch (error) {\n  return { isPasswordMatch: false, error: error.message };\n}"
+      },
+      "id": "login-verify-001",
+      "name": "Verify Password",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isPasswordMatch}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "login-pwcheck-001",
+      "name": "Password Match Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Invalid email or password\"}",
+        "options": {
+          "responseCode": "401"
+        }
+      },
+      "id": "login-pwfail-001",
+      "name": "Password Mismatch Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const jwt = require('jsonwebtoken');\nconst JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';\nconst expiresIn = '7d';\n\nconst payload = {\n  userId: items[0].json.user_id,\n  email: items[0].json.email\n};\n\ntry {\n  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: expiresIn });\n  return {\n    jwtToken: token,\n    user_id: items[0].json.user_id,\n    email: items[0].json.email,\n    first_name: items[0].json.first_name\n  };\n} catch (error) {\n  return { error: error.message };\n}"
+      },
+      "id": "login-jwt-001",
+      "name": "Generate JWT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"message\": \"Login successful\", \"token\": \"{{$json.jwtToken}}\", \"userId\": {{$json.user_id}}, \"email\": \"{{$json.email}}\", \"firstName\": \"{{$json.first_name}}\"}",
+        "options": {
+          "responseCode": "200"
+        }
+      },
+      "id": "login-success-001",
+      "name": "Login Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Login": {
+      "main": [
+        [
+          {
+            "node": "Validate Login Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Login Input": {
+      "main": [
+        [
+          {
+            "node": "Get User by Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Login Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User by Email": {
+      "main": [
+        [
+          {
+            "node": "User Found Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Found Check": {
+      "main": [
+        [
+          {
+            "node": "Verify Password",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "User Not Found Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Password": {
+      "main": [
+        [
+          {
+            "node": "Password Match Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Password Match Check": {
+      "main": [
+        [
+          {
+            "node": "Generate JWT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Password Mismatch Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate JWT": {
+      "main": [
+        [
+          {
+            "node": "Login Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

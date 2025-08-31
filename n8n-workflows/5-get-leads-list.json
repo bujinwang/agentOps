@@ -1,0 +1,220 @@
+{
+  "name": "Get Leads List API with Filtering",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "/leads",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "leads-webhook-001",
+      "name": "Webhook Get Leads",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// JWT Authentication (same as other protected endpoints)\nconst authHeader = items[0].json.headers?.authorization || items[0].json.request?.headers?.authorization;\n\nif (!authHeader || !authHeader.startsWith('Bearer ')) {\n  return { error: 'Missing token', authenticated: false };\n}\n\nconst jwt = require('jsonwebtoken');\nconst JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';\nconst token = authHeader.split(' ')[1];\n\ntry {\n  const decoded = jwt.verify(token, JWT_SECRET);\n  return {\n    ...items[0].json,\n    isAuthenticated: true,\n    authUserId: decoded.userId,\n    authUserEmail: decoded.email\n  };\n} catch (err) {\n  return { isAuthenticated: false, error: err.message };\n}"
+      },
+      "id": "leads-auth-001",
+      "name": "JWT Auth & Parse Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isAuthenticated}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "leads-authcheck-001",
+      "name": "Auth Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Unauthorized\"}",
+        "options": {
+          "responseCode": "401"
+        }
+      },
+      "id": "leads-unauth-001",
+      "name": "Unauthorized Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build dynamic SQL query based on query parameters\nconst query = items[0].json.query || {};\nconst authUserId = items[0].json.authUserId;\n\n// Base query\nlet sqlQuery = `SELECT \n  lead_id, first_name, last_name, email, phone_number, source, \n  status, priority, budget_min, budget_max, desired_location, \n  property_type, ai_summary, created_at, updated_at\nFROM leads \nWHERE user_id = ${authUserId}`;\n\nconst conditions = [];\nconst params = [];\n\n// Add filters\nif (query.status) {\n  conditions.push(\"status = ?\");\n  params.push(query.status);\n}\n\nif (query.priority) {\n  conditions.push(\"priority = ?\");\n  params.push(query.priority);\n}\n\nif (query.searchTerm) {\n  conditions.push(\"(first_name ILIKE ? OR last_name ILIKE ? OR email ILIKE ? OR notes ILIKE ?)\");\n  const searchPattern = `%${query.searchTerm}%`;\n  params.push(searchPattern, searchPattern, searchPattern, searchPattern);\n}\n\nif (query.propertyType) {\n  conditions.push(\"property_type = ?\");\n  params.push(query.propertyType);\n}\n\n// Add conditions to query\nif (conditions.length > 0) {\n  sqlQuery += \" AND \" + conditions.join(\" AND \");\n}\n\n// Add sorting\nconst sortBy = query.sortBy || 'created_at';\nconst sortOrder = query.sortOrder || 'DESC';\nsqlQuery += ` ORDER BY ${sortBy} ${sortOrder}`;\n\n// Add pagination\nconst limit = parseInt(query.limit) || 50;\nconst page = parseInt(query.page) || 1;\nconst offset = (page - 1) * limit;\n\nsqlQuery += ` LIMIT ${limit} OFFSET ${offset}`;\n\n// Replace ? with PostgreSQL $1, $2, etc. (simplified - in real n8n, use direct values)\nlet finalQuery = sqlQuery;\nparams.forEach((param, index) => {\n  finalQuery = finalQuery.replace('?', `'${param}'`);\n});\n\nreturn {\n  ...items[0].json,\n  sqlQuery: finalQuery,\n  pagination: { page, limit, offset }\n};"
+      },
+      "id": "leads-buildquery-001",
+      "name": "Build Query with Filters",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{$json.sqlQuery}}",
+        "options": {}
+      },
+      "id": "leads-execute-001",
+      "name": "Execute Leads Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 400],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Real Estate CRM Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as total FROM leads WHERE user_id = {{$json.authUserId}}",
+        "options": {}
+      },
+      "id": "leads-count-001",
+      "name": "Get Total Count",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 600],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Real Estate CRM Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format the response with leads data and pagination\nconst leadsData = items[0].json;\nconst countData = items[1].json;\n\nconst leads = Array.isArray(leadsData) ? leadsData : [leadsData];\nconst totalItems = countData.total || 0;\nconst pagination = items[0].json.pagination || { page: 1, limit: 50 };\n\nconst totalPages = Math.ceil(totalItems / pagination.limit);\n\n// Format leads data\nconst formattedLeads = leads.map(lead => ({\n  leadId: lead.lead_id,\n  firstName: lead.first_name,\n  lastName: lead.last_name,\n  email: lead.email,\n  phoneNumber: lead.phone_number,\n  source: lead.source,\n  status: lead.status,\n  priority: lead.priority,\n  budgetMin: lead.budget_min,\n  budgetMax: lead.budget_max,\n  desiredLocation: lead.desired_location,\n  propertyType: lead.property_type,\n  aiSummary: lead.ai_summary,\n  createdAt: lead.created_at,\n  updatedAt: lead.updated_at\n}));\n\nreturn {\n  message: \"Leads retrieved successfully\",\n  data: formattedLeads,\n  pagination: {\n    currentPage: pagination.page,\n    totalPages: totalPages,\n    totalItems: totalItems,\n    limit: pagination.limit\n  }\n};"
+      },
+      "id": "leads-format-001",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}",
+        "options": {
+          "responseCode": "200"
+        }
+      },
+      "id": "leads-response-001",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Get Leads": {
+      "main": [
+        [
+          {
+            "node": "JWT Auth & Parse Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JWT Auth & Parse Query": {
+      "main": [
+        [
+          {
+            "node": "Auth Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check": {
+      "main": [
+        [
+          {
+            "node": "Build Query with Filters",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unauthorized Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query with Filters": {
+      "main": [
+        [
+          {
+            "node": "Execute Leads Query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Total Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Leads Query": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Total Count": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
