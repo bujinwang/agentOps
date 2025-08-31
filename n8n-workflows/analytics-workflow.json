@@ -1,0 +1,349 @@
+{
+  "name": "Analytics Dashboard API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "/webhook/analytics/dashboard",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Dashboard Stats Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "analytics-dashboard"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "/webhook/analytics/leads",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Lead Stats Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        600
+      ],
+      "webhookId": "analytics-leads"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Dashboard Stats Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Dashboard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Lead Stats Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Leads",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        340,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract user ID from JWT token\nconst authHeader = $input.all()[0].json.headers.authorization;\nif (!authHeader || !authHeader.startsWith('Bearer ')) {\n  return { user_id: null };\n}\n\nconst token = authHeader.substring(7);\ntry {\n  const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());\n  \n  return {\n    user_id: payload.userId\n  };\n} catch (error) {\n  return { user_id: null };\n}"
+      },
+      "name": "Extract User ID - Dashboard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract user ID and timeframe from request\nconst authHeader = $input.all()[0].json.headers.authorization;\nconst queryParams = $input.all()[0].json.query || {};\n\nif (!authHeader || !authHeader.startsWith('Bearer ')) {\n  return { user_id: null };\n}\n\nconst token = authHeader.substring(7);\ntry {\n  const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());\n  \n  return {\n    user_id: payload.userId,\n    timeframe: queryParams.timeframe || 'month'\n  };\n} catch (error) {\n  return { user_id: null };\n}"
+      },
+      "name": "Extract User ID - Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        440,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Dashboard Statistics Query\nWITH user_leads AS (\n  SELECT * FROM leads \n  WHERE (assigned_to = {{ $json.user_id }} OR created_by = {{ $json.user_id }})\n),\nuser_tasks AS (\n  SELECT * FROM tasks \n  WHERE created_by = {{ $json.user_id }}\n),\nuser_interactions AS (\n  SELECT i.* FROM interactions i\n  JOIN user_leads l ON i.lead_id = l.lead_id\n),\nstats AS (\n  SELECT \n    -- Total leads\n    (SELECT COUNT(*) FROM user_leads) as total_leads,\n    \n    -- New leads (last 30 days)\n    (SELECT COUNT(*) FROM user_leads WHERE created_at >= NOW() - INTERVAL '30 days') as new_leads,\n    \n    -- Active tasks\n    (SELECT COUNT(*) FROM user_tasks WHERE completed = false) as active_tasks,\n    \n    -- Completed tasks (last 30 days)\n    (SELECT COUNT(*) FROM user_tasks WHERE completed = true AND updated_at >= NOW() - INTERVAL '30 days') as completed_tasks,\n    \n    -- Leads this month\n    (SELECT COUNT(*) FROM user_leads WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)) as leads_this_month,\n    \n    -- Conversion rate (Closed Won / Total Leads * 100)\n    CASE \n      WHEN (SELECT COUNT(*) FROM user_leads) > 0 THEN\n        (SELECT COUNT(*) FROM user_leads WHERE status = 'Closed Won') * 100.0 / (SELECT COUNT(*) FROM user_leads)\n      ELSE 0\n    END as conversion_rate\n)\nSELECT \n  total_leads,\n  new_leads,\n  active_tasks,\n  completed_tasks,\n  leads_this_month,\n  ROUND(conversion_rate, 2) as conversion_rate\nFROM stats;\n\n-- Recent Activity (last 10 interactions)\nWITH recent_activity AS (\n  SELECT \n    type,\n    content,\n    interaction_date,\n    'interaction' as activity_type\n  FROM user_interactions\n  ORDER BY interaction_date DESC\n  LIMIT 10\n)\nSELECT * FROM recent_activity;"
+      },
+      "name": "Dashboard Stats Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Lead Statistics Query based on timeframe\nWITH user_leads AS (\n  SELECT * FROM leads \n  WHERE (assigned_to = {{ $json.user_id }} OR created_by = {{ $json.user_id }})\n  AND created_at >= \n    CASE \n      WHEN '{{ $json.timeframe }}' = 'week' THEN NOW() - INTERVAL '7 days'\n      WHEN '{{ $json.timeframe }}' = 'quarter' THEN NOW() - INTERVAL '3 months'\n      ELSE NOW() - INTERVAL '1 month'\n    END\n),\n-- Leads by Status\nleads_by_status AS (\n  SELECT \n    status,\n    COUNT(*) as count\n  FROM user_leads\n  GROUP BY status\n  ORDER BY count DESC\n),\n-- Leads by Source\nleads_by_source AS (\n  SELECT \n    source,\n    COUNT(*) as count\n  FROM user_leads\n  GROUP BY source\n  ORDER BY count DESC\n),\n-- Leads by Priority\nleads_by_priority AS (\n  SELECT \n    priority,\n    COUNT(*) as count\n  FROM user_leads\n  GROUP BY priority\n  ORDER BY count DESC\n),\n-- Leads over Time\nleads_over_time AS (\n  SELECT \n    DATE(created_at) as date,\n    COUNT(*) as count\n  FROM user_leads\n  WHERE created_at >= \n    CASE \n      WHEN '{{ $json.timeframe }}' = 'week' THEN NOW() - INTERVAL '7 days'\n      WHEN '{{ $json.timeframe }}' = 'quarter' THEN NOW() - INTERVAL '3 months'\n      ELSE NOW() - INTERVAL '1 month'\n    END\n  GROUP BY DATE(created_at)\n  ORDER BY date\n)\nSELECT \n  'status' as category,\n  json_agg(json_build_object('status', status, 'count', count)) as data\nFROM leads_by_status\nUNION ALL\nSELECT \n  'source' as category,\n  json_agg(json_build_object('source', source, 'count', count)) as data\nFROM leads_by_source\nUNION ALL\nSELECT \n  'priority' as category,\n  json_agg(json_build_object('priority', priority, 'count', count)) as data\nFROM leads_by_priority\nUNION ALL\nSELECT \n  'time' as category,\n  json_agg(json_build_object('date', date, 'count', count)) as data\nFROM leads_over_time;"
+      },
+      "name": "Lead Stats Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        640,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process dashboard stats and recent activity\nconst items = $input.all();\nif (!items.length) {\n  return { data: null };\n}\n\n// First result should be the stats\nconst statsResult = items[0];\nif (!statsResult || !statsResult.json) {\n  return { data: null };\n}\n\n// Get the statistics\nconst stats = Array.isArray(statsResult.json) ? statsResult.json[0] : statsResult.json;\n\n// Get recent activity (second query result if available)\nlet recentActivity = [];\nif (items.length > 1 && items[1].json) {\n  recentActivity = Array.isArray(items[1].json) ? items[1].json : [];\n}\n\nreturn {\n  data: {\n    totalLeads: parseInt(stats.total_leads) || 0,\n    newLeads: parseInt(stats.new_leads) || 0,\n    activeTasks: parseInt(stats.active_tasks) || 0,\n    completedTasks: parseInt(stats.completed_tasks) || 0,\n    leadsThisMonth: parseInt(stats.leads_this_month) || 0,\n    conversionRate: parseFloat(stats.conversion_rate) || 0,\n    recentActivity: recentActivity\n  }\n};"
+      },
+      "name": "Process Dashboard Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process lead statistics into organized format\nconst items = $input.all();\nif (!items.length || !items[0].json) {\n  return { data: null };\n}\n\nconst results = Array.isArray(items[0].json) ? items[0].json : [items[0].json];\n\n// Initialize the response structure\nconst response = {\n  leadsByStatus: [],\n  leadsBySource: [],\n  leadsByPriority: [],\n  leadsOverTime: []\n};\n\n// Process each category\nresults.forEach(result => {\n  if (!result.category || !result.data) return;\n  \n  switch (result.category) {\n    case 'status':\n      response.leadsByStatus = result.data || [];\n      break;\n    case 'source':\n      response.leadsBySource = result.data || [];\n      break;\n    case 'priority':\n      response.leadsByPriority = result.data || [];\n      break;\n    case 'time':\n      response.leadsOverTime = result.data || [];\n      break;\n  }\n});\n\nreturn { data: response };"
+      },
+      "name": "Process Lead Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        840,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Dashboard Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Lead Stats Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseStatusCode": 401,
+        "responseBody": "{ \"error\": \"Unauthorized\" }"
+      },
+      "name": "Auth Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        340,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseStatusCode": 500,
+        "responseBody": "={ \"error\": \"Database error: \" + $json.message }"
+      },
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        640,
+        900
+      ]
+    }
+  ],
+  "connections": {
+    "Dashboard Stats Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Stats Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Extract User ID - Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Leads": {
+      "main": [
+        [
+          {
+            "node": "Extract User ID - Leads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User ID - Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Dashboard Stats Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User ID - Leads": {
+      "main": [
+        [
+          {
+            "node": "Lead Stats Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dashboard Stats Query": {
+      "main": [
+        [
+          {
+            "node": "Process Dashboard Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Stats Query": {
+      "main": [
+        [
+          {
+            "node": "Process Lead Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Dashboard Stats": {
+      "main": [
+        [
+          {
+            "node": "Dashboard Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Lead Stats": {
+      "main": [
+        [
+          {
+            "node": "Lead Stats Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/Toronto"
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "id": "analytics-workflow",
+  "tags": []
+}

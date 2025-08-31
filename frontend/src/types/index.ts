@@ -201,3 +201,23 @@ export interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
 }
+
+// Notification types
+export interface Notification {
+  id: number;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'error' | 'reminder';
+  read: boolean;
+  createdAt: string;
+  updatedAt: string;
+  relatedId?: number;
+  relatedType?: 'lead' | 'task' | 'interaction';
+  actionUrl?: string;
+}
+
+export interface NotificationsResponse {
+  data: Notification[];
+  total: number;
+  unread: number;
+}

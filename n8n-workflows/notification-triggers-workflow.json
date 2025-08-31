@@ -1,0 +1,414 @@
+{
+  "name": "Notification Triggers",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Reminders Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Find overdue tasks\nSELECT t.*, l.first_name, l.last_name, l.email, u.user_id\nFROM tasks t\nLEFT JOIN leads l ON t.lead_id = l.lead_id\nJOIN users u ON t.created_by = u.user_id OR l.assigned_to = u.user_id\nWHERE t.due_date < NOW() AND t.completed = false\nAND NOT EXISTS (\n  SELECT 1 FROM notifications n \n  WHERE n.related_type = 'task' AND n.related_id = t.task_id \n  AND n.type = 'reminder' AND n.created_at > NOW() - INTERVAL '1 day'\n)"
+      },
+      "name": "Find Overdue Tasks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Find leads with no activity in 7 days\nSELECT l.*, u.user_id\nFROM leads l\nJOIN users u ON l.assigned_to = u.user_id OR l.created_by = u.user_id\nWHERE l.status NOT IN ('Closed Won', 'Closed Lost')\nAND NOT EXISTS (\n  SELECT 1 FROM interactions i \n  WHERE i.lead_id = l.lead_id \n  AND i.interaction_date > NOW() - INTERVAL '7 days'\n)\nAND NOT EXISTS (\n  SELECT 1 FROM notifications n \n  WHERE n.related_type = 'lead' AND n.related_id = l.lead_id \n  AND n.type = 'reminder' AND n.created_at > NOW() - INTERVAL '1 day'\n)"
+      },
+      "name": "Find Inactive Leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Find tasks due tomorrow\nSELECT t.*, l.first_name, l.last_name, l.email, u.user_id\nFROM tasks t\nLEFT JOIN leads l ON t.lead_id = l.lead_id\nJOIN users u ON t.created_by = u.user_id OR l.assigned_to = u.user_id\nWHERE DATE(t.due_date) = DATE(NOW() + INTERVAL '1 day')\nAND t.completed = false\nAND NOT EXISTS (\n  SELECT 1 FROM notifications n \n  WHERE n.related_type = 'task' AND n.related_id = t.task_id \n  AND n.type = 'reminder' AND n.created_at > NOW() - INTERVAL '1 day'\n)"
+      },
+      "name": "Find Due Tomorrow Tasks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Process Overdue Tasks",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [
+        640,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Process Inactive Leads",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [
+        640,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Process Due Tomorrow",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [
+        640,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO notifications (user_id, title, message, type, related_id, related_type, action_url, created_at)\nVALUES (\n  {{ $json.user_id }},\n  'Overdue Task: {{ $json.title }}',\n  'Task \"{{ $json.title }}\" was due {{ Math.ceil((new Date() - new Date($json.due_date)) / (1000 * 60 * 60 * 24)) }} days ago{{ $json.first_name ? ' for ' + $json.first_name + ' ' + $json.last_name : '' }}',\n  'warning',\n  {{ $json.task_id }},\n  'task',\n  '/tasks/{{ $json.task_id }}',\n  NOW()\n)"
+      },
+      "name": "Create Overdue Notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        840,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO notifications (user_id, title, message, type, related_id, related_type, action_url, created_at)\nVALUES (\n  {{ $json.user_id }},\n  'Follow up needed: {{ $json.first_name }} {{ $json.last_name }}',\n  'Lead {{ $json.first_name }} {{ $json.last_name }} has had no activity in 7+ days. Consider reaching out to maintain engagement.',\n  'reminder',\n  {{ $json.lead_id }},\n  'lead',\n  '/leads/{{ $json.lead_id }}',\n  NOW()\n)"
+      },
+      "name": "Create Follow-up Notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        840,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO notifications (user_id, title, message, type, related_id, related_type, action_url, created_at)\nVALUES (\n  {{ $json.user_id }},\n  'Task due tomorrow: {{ $json.title }}',\n  'Don\\'t forget: \"{{ $json.title }}\" is due tomorrow{{ $json.first_name ? ' for ' + $json.first_name + ' ' + $json.last_name : '' }}',\n  'info',\n  {{ $json.task_id }},\n  'task',\n  '/tasks/{{ $json.task_id }}',\n  NOW()\n)"
+      },
+      "name": "Create Due Tomorrow Notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        840,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/webhook/notifications/trigger/lead-status-change",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Lead Status Change Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        800
+      ],
+      "webhookId": "notification-lead-status"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/webhook/notifications/trigger/task-completed",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Task Completed Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        1000
+      ],
+      "webhookId": "notification-task-complete"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO notifications (user_id, title, message, type, related_id, related_type, action_url, created_at)\nVALUES (\n  {{ $json.assigned_to || $json.created_by }},\n  'Lead status updated: {{ $json.first_name }} {{ $json.last_name }}',\n  'Lead {{ $json.first_name }} {{ $json.last_name }} status changed to {{ $json.status }}{{ $json.old_status ? ' (was ' + $json.old_status + ')' : '' }}',\n  {{ $json.status === 'Closed Won' ? '\\'success\\'' : $json.status === 'Closed Lost' ? '\\'error\\'' : '\\'info\\'' }},\n  {{ $json.lead_id }},\n  'lead',\n  '/leads/{{ $json.lead_id }}',\n  NOW()\n)"
+      },
+      "name": "Create Status Change Notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO notifications (user_id, title, message, type, related_id, related_type, action_url, created_at)\nVALUES (\n  {{ $json.created_by }},\n  'Task completed: {{ $json.title }}',\n  'Great job! You completed \"{{ $json.title }}\"{{ $json.lead_name ? ' for ' + $json.lead_name : '' }}',\n  'success',\n  {{ $json.task_id }},\n  'task',\n  '/tasks/{{ $json.task_id }}',\n  NOW()\n)"
+      },
+      "name": "Create Task Complete Notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        1000
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"success\": true, \"message\": \"Status change notification created\" }"
+      },
+      "name": "Status Change Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        640,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"success\": true, \"message\": \"Task completion notification created\" }"
+      },
+      "name": "Task Complete Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        640,
+        1000
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Reminders Trigger": {
+      "main": [
+        [
+          {
+            "node": "Find Overdue Tasks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find Inactive Leads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find Due Tomorrow Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Overdue Tasks": {
+      "main": [
+        [
+          {
+            "node": "Process Overdue Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Inactive Leads": {
+      "main": [
+        [
+          {
+            "node": "Process Inactive Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Due Tomorrow Tasks": {
+      "main": [
+        [
+          {
+            "node": "Process Due Tomorrow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Overdue Tasks": {
+      "main": [
+        [
+          {
+            "node": "Create Overdue Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Inactive Leads": {
+      "main": [
+        [
+          {
+            "node": "Create Follow-up Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Due Tomorrow": {
+      "main": [
+        [
+          {
+            "node": "Create Due Tomorrow Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Status Change Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create Status Change Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Completed Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create Task Complete Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Status Change Notification": {
+      "main": [
+        [
+          {
+            "node": "Status Change Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Task Complete Notification": {
+      "main": [
+        [
+          {
+            "node": "Task Complete Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/Toronto"
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "id": "notification-triggers-workflow",
+  "tags": []
+}

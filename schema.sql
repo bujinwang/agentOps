@@ -45,6 +45,27 @@ CREATE TABLE interactions (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Notifications Table: For system notifications and reminders
+CREATE TABLE notifications (
+    notification_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL, -- 'info', 'warning', 'success', 'error', 'reminder'
+    read BOOLEAN DEFAULT FALSE,
+    related_id INTEGER, -- ID of related entity (lead_id, task_id, etc.)
+    related_type VARCHAR(50), -- 'lead', 'task', 'interaction'
+    action_url VARCHAR(500), -- Deep link to relevant screen
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add indexes for notifications
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_notifications_read ON notifications(read);
+CREATE INDEX idx_notifications_type ON notifications(type);
+CREATE INDEX idx_notifications_created_at ON notifications(created_at);
+
 -- Tasks Table: For managing follow-ups and other to-dos related to leads or general tasks
 CREATE TABLE tasks (
     task_id SERIAL PRIMARY KEY,
