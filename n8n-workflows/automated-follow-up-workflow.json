@@ -1,0 +1,443 @@
+{
+  "name": "Automated Follow-up and Nurturing",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            },
+            {
+              "hour": 14,
+              "minute": 0
+            },
+            {
+              "hour": 17,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Follow-up Scheduler",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Find leads that need follow-up based on different criteria\nWITH follow_up_candidates AS (\n  -- New leads that haven't been contacted in 24 hours\n  SELECT \n    l.*, \n    'new_lead_24h' as follow_up_type,\n    'New lead - 24 hour follow-up' as follow_up_reason,\n    'High' as suggested_priority\n  FROM leads l \n  WHERE l.status = 'New' \n    AND l.created_at < NOW() - INTERVAL '24 hours'\n    AND (l.last_contacted_at IS NULL OR l.last_contacted_at < l.created_at)\n    AND NOT EXISTS (\n      SELECT 1 FROM interactions i \n      WHERE i.lead_id = l.lead_id \n      AND i.interaction_date > NOW() - INTERVAL '24 hours'\n    )\n  \n  UNION ALL\n  \n  -- Contacted leads with no follow-up in 3 days\n  SELECT \n    l.*, \n    'contacted_3d' as follow_up_type,\n    'Contacted lead - 3 day follow-up' as follow_up_reason,\n    'Medium' as suggested_priority\n  FROM leads l \n  WHERE l.status = 'Contacted'\n    AND l.last_contacted_at < NOW() - INTERVAL '3 days'\n    AND NOT EXISTS (\n      SELECT 1 FROM interactions i \n      WHERE i.lead_id = l.lead_id \n      AND i.interaction_date > NOW() - INTERVAL '3 days'\n    )\n  \n  UNION ALL\n  \n  -- Qualified leads with no activity in 5 days\n  SELECT \n    l.*, \n    'qualified_5d' as follow_up_type,\n    'Qualified lead - 5 day nurturing' as follow_up_reason,\n    'High' as suggested_priority\n  FROM leads l \n  WHERE l.status = 'Qualified'\n    AND (l.last_contacted_at < NOW() - INTERVAL '5 days' OR l.last_contacted_at IS NULL)\n    AND NOT EXISTS (\n      SELECT 1 FROM interactions i \n      WHERE i.lead_id = l.lead_id \n      AND i.interaction_date > NOW() - INTERVAL '5 days'\n    )\n  \n  UNION ALL\n  \n  -- High-priority leads with no contact in 48 hours\n  SELECT \n    l.*, \n    'high_priority_48h' as follow_up_type,\n    'High priority lead - urgent follow-up' as follow_up_reason,\n    'High' as suggested_priority\n  FROM leads l \n  WHERE l.priority = 'High'\n    AND l.status NOT IN ('Closed Won', 'Closed Lost')\n    AND (l.last_contacted_at < NOW() - INTERVAL '48 hours' OR l.last_contacted_at IS NULL)\n    AND NOT EXISTS (\n      SELECT 1 FROM interactions i \n      WHERE i.lead_id = l.lead_id \n      AND i.interaction_date > NOW() - INTERVAL '48 hours'\n    )\n)\nSELECT * FROM follow_up_candidates\nLIMIT 20;"
+      },
+      "name": "Find Follow-up Candidates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Process Each Lead",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate personalized follow-up content based on lead data and history\nconst lead = $input.all()[0].json;\n\n// Determine follow-up method and content\nlet followUpMethod = 'email'; // default\nlet subject = '';\nlet content = '';\nlet taskTitle = '';\nlet taskDescription = '';\n\nconst leadName = `${lead.first_name} ${lead.last_name}`;\nconst propertyInterest = lead.property_type || 'property';\nconst location = lead.desired_location || 'your preferred area';\nconst budget = lead.budget_max ? ` with a budget up to $${lead.budget_max.toLocaleString()}` : '';\n\nswitch (lead.follow_up_type) {\n  case 'new_lead_24h':\n    followUpMethod = lead.phone_number ? 'phone' : 'email';\n    subject = `Welcome to [Real Estate Team] - Let's Find Your Perfect ${propertyInterest}`;\n    content = `Hi ${lead.first_name},\\n\\nThank you for your interest in finding a ${propertyInterest} in ${location}${budget}. I wanted to personally reach out to introduce myself and see how I can help you in your property search.\\n\\nI've prepared some initial listings that match your criteria and would love to discuss them with you. When would be a good time for a brief call this week?\\n\\nBest regards,\\n[Agent Name]`;\n    taskTitle = `Call new lead: ${leadName}`;\n    taskDescription = `New lead follow-up call. Lead interested in ${propertyInterest} in ${location}${budget}. Initial contact within 24 hours of inquiry.`;\n    break;\n    \n  case 'contacted_3d':\n    followUpMethod = 'email';\n    subject = `Following up on Your ${propertyInterest} Search in ${location}`;\n    content = `Hi ${lead.first_name},\\n\\nI hope you're doing well! I wanted to follow up on our previous conversation about your ${propertyInterest} search in ${location}.\\n\\nSince we last spoke, several new properties have come on the market that might interest you. I'd love to share these with you and get your thoughts.\\n\\nWould you be available for a quick call this week to discuss the latest options?\\n\\nBest regards,\\n[Agent Name]`;\n    taskTitle = `Follow-up with ${leadName}`;\n    taskDescription = `3-day follow-up for contacted lead. Share new listings and schedule viewing if interested.`;\n    break;\n    \n  case 'qualified_5d':\n    followUpMethod = 'phone';\n    subject = `Market Update for Your ${propertyInterest} Search`;\n    content = `Hi ${lead.first_name},\\n\\nAs a qualified buyer looking for a ${propertyInterest} in ${location}, I wanted to provide you with the latest market insights and new listings.\\n\\nThe market has been quite active, and I've identified several properties that match your criteria. Some are generating multiple offers, so timing is important.\\n\\nI'd like to schedule a call to discuss these opportunities and your current priorities. Are you available for a 15-minute call tomorrow?\\n\\nBest regards,\\n[Agent Name]`;\n    taskTitle = `Qualified lead check-in: ${leadName}`;\n    taskDescription = `5-day nurturing call for qualified lead. Discuss market updates, new listings, and next steps.`;\n    break;\n    \n  case 'high_priority_48h':\n    followUpMethod = 'phone';\n    subject = `Urgent: New ${propertyInterest} Opportunities in ${location}`;\n    content = `Hi ${lead.first_name},\\n\\nI have some exciting news about ${propertyInterest} opportunities in ${location} that I think you'll want to know about immediately.\\n\\nAs a high-priority client, I wanted to reach out personally to discuss these time-sensitive opportunities. Some of these properties won't last long in this market.\\n\\nCan I call you today to discuss? Please let me know a good time.\\n\\nBest regards,\\n[Agent Name]`;\n    taskTitle = `URGENT: Call high-priority lead ${leadName}`;\n    taskDescription = `Urgent 48-hour follow-up for high-priority lead. Discuss time-sensitive opportunities and schedule immediate action.`;\n    break;\n    \n  default:\n    subject = `Checking in on Your Property Search`;\n    content = `Hi ${lead.first_name},\\n\\nI wanted to check in and see how your property search is progressing. If you have any questions or need assistance, I'm here to help.\\n\\nBest regards,\\n[Agent Name]`;\n    taskTitle = `Follow-up with ${leadName}`;\n    taskDescription = `General follow-up with lead.`;\n}\n\n// Add personalization based on lead data\nif (lead.bedrooms_min) {\n  content += `\\n\\nP.S. I remember you're looking for at least ${lead.bedrooms_min} bedrooms - I'll keep that in mind when sourcing properties for you.`;\n}\n\nif (lead.notes && lead.notes.includes('first-time')) {\n  content += `\\n\\nAs a first-time buyer, I'm here to guide you through every step of the process.`;\n}\n\n// Determine due date based on priority\nlet dueDate = new Date();\nif (lead.follow_up_type === 'high_priority_48h') {\n  dueDate.setHours(dueDate.getHours() + 2); // 2 hours for urgent\n} else if (lead.follow_up_type === 'new_lead_24h') {\n  dueDate.setHours(dueDate.getHours() + 4); // 4 hours for new leads\n} else {\n  dueDate.setDate(dueDate.getDate() + 1); // 1 day for others\n}\n\nreturn {\n  leadId: lead.lead_id,\n  leadName,\n  followUpType: lead.follow_up_type,\n  followUpReason: lead.follow_up_reason,\n  followUpMethod,\n  emailSubject: subject,\n  emailContent: content,\n  taskTitle,\n  taskDescription,\n  suggestedPriority: lead.suggested_priority,\n  dueDate: dueDate.toISOString(),\n  leadData: {\n    firstName: lead.first_name,\n    lastName: lead.last_name,\n    email: lead.email,\n    phone: lead.phone_number,\n    status: lead.status,\n    priority: lead.priority\n  }\n};"
+      },
+      "name": "Generate Follow-up Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Create automated follow-up task\nINSERT INTO tasks (title, description, priority, due_date, lead_id, created_by, created_at)\nVALUES (\n  '{{ $json.taskTitle }}',\n  'AUTOMATED FOLLOW-UP\\n\\nType: {{ $json.followUpType }}\\nReason: {{ $json.followUpReason }}\\nMethod: {{ $json.followUpMethod }}\\n\\n{{ $json.taskDescription }}\\n\\nSuggested Email Subject: {{ $json.emailSubject }}\\n\\nSuggested Content:\\n{{ $json.emailContent }}',\n  '{{ $json.suggestedPriority }}',\n  '{{ $json.dueDate }}',\n  {{ $json.leadId }},\n  1, -- System user\n  NOW()\n)\nRETURNING *;"
+      },
+      "name": "Create Follow-up Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.followUpMethod }}",
+              "operation": "equals",
+              "value2": "email"
+            }
+          ]
+        }
+      },
+      "name": "Email Follow-up Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.followUpMethod }}",
+              "operation": "equals",
+              "value2": "phone"
+            }
+          ]
+        }
+      },
+      "name": "Phone Follow-up Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        400
+      ]
+    },
+    {
+      "parameters": {\n        "operation": "executeQuery",\n        "query": "=-- Log email follow-up interaction\nINSERT INTO interactions (lead_id, user_id, type, content, interaction_date, created_at)\nVALUES (\n  {{ $json.leadId }},\n  1, -- System user\n  'Email Sent',\n  'Automated follow-up email sent\\n\\nSubject: {{ $json.emailSubject }}\\n\\nContent: {{ $json.emailContent.substring(0, 500) }}...',\n  NOW(),\n  NOW()\n)\nRETURNING *;"
+      },
+      "name": "Log Email Interaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        150
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Update lead's last contacted timestamp\nUPDATE leads SET \n  last_contacted_at = NOW(),\n  updated_at = NOW()\nWHERE lead_id = {{ $json.leadId }}\nRETURNING *;"
+      },
+      "name": "Update Lead Contact Time",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Create phone call reminder notification\nINSERT INTO notifications (user_id, title, message, type, related_id, related_type, action_url, created_at)\nVALUES (\n  1, -- Default user, should be dynamic in real implementation\n  'Phone Follow-up Required',\n  'Automated system recommends phone call with {{ $json.leadName }}. Priority: {{ $json.suggestedPriority }}',\n  'reminder',\n  {{ $json.leadId }},\n  'lead',\n  '/leads/{{ $json.leadId }}',\n  NOW()\n)\nRETURNING *;"
+      },
+      "name": "Create Phone Reminder",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        450
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 30
+            }
+          ]
+        }
+      },
+      "name": "Lead Nurturing Scheduler",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Find leads for nurturing campaigns\nSELECT l.*, \n  CASE \n    WHEN l.status = 'New' AND l.created_at < NOW() - INTERVAL '7 days' THEN 'new_lead_nurture'\n    WHEN l.status = 'Contacted' AND l.last_contacted_at < NOW() - INTERVAL '14 days' THEN 'contacted_nurture'\n    WHEN l.status IN ('Qualified', 'Showing Scheduled') AND l.last_contacted_at < NOW() - INTERVAL '10 days' THEN 'active_nurture'\n    WHEN l.priority = 'Low' AND l.last_contacted_at < NOW() - INTERVAL '30 days' THEN 'low_priority_nurture'\n    ELSE 'general_nurture'\n  END as nurture_type\nFROM leads l\nWHERE l.status NOT IN ('Closed Won', 'Closed Lost', 'Archived')\n  AND (\n    (l.status = 'New' AND l.created_at < NOW() - INTERVAL '7 days') OR\n    (l.status = 'Contacted' AND l.last_contacted_at < NOW() - INTERVAL '14 days') OR\n    (l.status IN ('Qualified', 'Showing Scheduled') AND l.last_contacted_at < NOW() - INTERVAL '10 days') OR\n    (l.priority = 'Low' AND l.last_contacted_at < NOW() - INTERVAL '30 days')\n  )\n  -- Don't nurture if they've been contacted recently\n  AND NOT EXISTS (\n    SELECT 1 FROM interactions i \n    WHERE i.lead_id = l.lead_id \n    AND i.type IN ('Email Sent', 'Call Logged', 'SMS Sent')\n    AND i.interaction_date > NOW() - INTERVAL '7 days'\n  )\nORDER BY \n  CASE l.priority\n    WHEN 'High' THEN 1\n    WHEN 'Medium' THEN 2\n    WHEN 'Low' THEN 3\n  END,\n  l.last_contacted_at ASC NULLS FIRST\nLIMIT 15;"
+      },
+      "name": "Find Nurturing Candidates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Process Nurturing Leads",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [
+        640,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate nurturing content based on lead stage and history\nconst lead = $input.all()[0].json;\nconst leadName = `${lead.first_name} ${lead.last_name}`;\n\nlet nurtureContent = {\n  subject: '',\n  content: '',\n  type: 'educational'\n};\n\nconst templates = {\n  new_lead_nurture: {\n    subject: 'Your Property Search Journey - Getting Started',\n    content: `Hi ${lead.first_name},\\n\\nI noticed you've been exploring properties recently. House hunting can feel overwhelming, so I wanted to share some helpful resources to get you started on the right track.\\n\\nHere's what I recommend for new buyers:\\n\\n1. Get pre-approved for financing (I have trusted lender partners)\\n2. Define your must-haves vs. nice-to-haves\\n3. Understand the local market trends\\n\\nI've attached a comprehensive buyer's guide that covers these topics and more.\\n\\nFeel free to reach out with any questions - I'm here to help!\\n\\nBest,\\n[Agent Name]`,\n    type: 'educational'\n  },\n  \n  contacted_nurture: {\n    subject: 'Market Update: What\\'s Happening in Your Area',\n    content: `Hi ${lead.first_name},\\n\\nI hope your property search is going well! I wanted to share some recent market insights that might be helpful.\\n\\nRecent trends in ${lead.desired_location || 'your area'}:\\n• Average days on market: 23 days\\n• Price trends: Stable with slight appreciation\\n• New listings this week: 12 properties\\n\\nI've also noticed some great opportunities that match your criteria. Would you like me to send you a curated list of the top 3-5 properties worth considering?\\n\\nLet me know if you'd like to chat about any of these trends or see the latest listings.\\n\\nBest,\\n[Agent Name]`,\n    type: 'market_update'\n  },\n  \n  active_nurture: {\n    subject: 'Timing Your Move: Market Insights for Serious Buyers',\n    content: `Hi ${lead.first_name},\\n\\nAs someone actively looking for a ${lead.property_type || 'property'}, I wanted to share some strategic insights about timing your purchase.\\n\\nCurrent market conditions favor buyers who:\\n• Have financing ready\\n• Can move quickly on the right property\\n• Understand true market value\\n\\nI've been tracking properties similar to what you're looking for, and I'm seeing some interesting patterns that could benefit you.\\n\\nWould you be interested in a brief call this week to discuss these trends and how they apply to your specific search?\\n\\nBest,\\n[Agent Name]`,\n    type: 'strategy'\n  },\n  \n  low_priority_nurture: {\n    subject: 'Staying Connected - Property Market Check-in',\n    content: `Hi ${lead.first_name},\\n\\nI wanted to check in and see if your property needs have evolved since we last spoke.\\n\\nThe market has seen some interesting changes, and I always like to keep my clients informed about opportunities - even if timing isn't immediate.\\n\\nIf your situation has changed or you'd like to stay updated on market trends, just let me know. Otherwise, I'll continue to keep you on my list for periodic updates.\\n\\nBest,\\n[Agent Name]`,\n    type: 'check_in'\n  }\n};\n\nnurtureContent = templates[lead.nurture_type] || templates.general_nurture;\n\n// Personalize based on lead data\nif (lead.budget_max) {\n  nurtureContent.content += `\\n\\nP.S. I'm keeping an eye on properties in your ${lead.budget_max ? '$' + lead.budget_max.toLocaleString() : ''} range.`;\n}\n\nreturn {\n  leadId: lead.lead_id,\n  leadName,\n  nurtureType: lead.nurture_type,\n  subject: nurtureContent.subject,\n  content: nurtureContent.content,\n  contentType: nurtureContent.type,\n  leadEmail: lead.email,\n  leadData: {\n    firstName: lead.first_name,\n    status: lead.status,\n    priority: lead.priority\n  }\n};"
+      },
+      "name": "Generate Nurture Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        840,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Log nurturing email interaction\nINSERT INTO interactions (lead_id, user_id, type, content, interaction_date, created_at)\nVALUES (\n  {{ $json.leadId }},\n  1, -- System user\n  'Email Sent',\n  'Automated nurturing email sent\\n\\nType: {{ $json.nurtureType }}\\nSubject: {{ $json.subject }}\\n\\nContent: {{ $json.content.substring(0, 300) }}...',\n  NOW(),\n  NOW()\n)\nRETURNING *;"
+      },
+      "name": "Log Nurture Interaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Update lead's last contacted timestamp for nurturing\nUPDATE leads SET \n  last_contacted_at = NOW(),\n  updated_at = NOW()\nWHERE lead_id = {{ $json.leadId }}\nRETURNING *;"
+      },
+      "name": "Update Nurture Contact Time",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Follow-up Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Find Follow-up Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Follow-up Candidates": {
+      "main": [
+        [
+          {
+            "node": "Process Each Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Each Lead": {
+      "main": [
+        [
+          {
+            "node": "Generate Follow-up Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Follow-up Content": {
+      "main": [
+        [
+          {
+            "node": "Create Follow-up Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Follow-up Task": {
+      "main": [
+        [
+          {
+            "node": "Email Follow-up Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Phone Follow-up Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Lead Contact Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Follow-up Check": {
+      "main": [
+        [
+          {
+            "node": "Log Email Interaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phone Follow-up Check": {
+      "main": [
+        [
+          {
+            "node": "Create Phone Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Nurturing Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Find Nurturing Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Nurturing Candidates": {
+      "main": [
+        [
+          {
+            "node": "Process Nurturing Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Nurturing Leads": {
+      "main": [
+        [
+          {
+            "node": "Generate Nurture Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Nurture Content": {
+      "main": [
+        [
+          {
+            "node": "Log Nurture Interaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Nurture Interaction": {
+      "main": [
+        [
+          {
+            "node": "Update Nurture Contact Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/Toronto"
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "id": "automated-follow-up-workflow",
+  "tags": []
+}

@@ -1,0 +1,335 @@
+{
+  "name": "Market Insights and Property Recommendations",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/webhook/leads/*/recommendations",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Property Recommendations Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "property-recommendations"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "/webhook/market/insights",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Market Insights Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        600
+      ],
+      "webhookId": "market-insights"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Property Recommendations Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Recommendations",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Market Insights Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Market",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        340,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract lead ID from URL path\nconst request = $input.all()[0].json;\nconst pathParts = request.params.path.split('/');\nconst leadIdIndex = pathParts.findIndex(part => part === 'leads') + 1;\nconst leadId = pathParts[leadIdIndex];\n\nreturn {\n  leadId: parseInt(leadId),\n  requestBody: request.body || {}\n};"
+      },
+      "name": "Extract Lead ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract market insights parameters\nconst request = $input.all()[0].json;\nconst queryParams = request.query || {};\n\nreturn {\n  location: queryParams.location || 'Toronto',\n  propertyType: queryParams.propertyType || 'all',\n  priceRange: queryParams.priceRange || 'all',\n  timeframe: queryParams.timeframe || '30days'\n};"
+      },
+      "name": "Extract Market Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        440,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Get lead details for recommendations\nSELECT * FROM leads WHERE lead_id = {{ $json.leadId }}"
+      },
+      "name": "Get Lead Details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate property recommendations based on lead preferences\nconst lead = $input.all()[0].json;\nif (!lead) {\n  return { error: 'Lead not found' };\n}\n\n// Simulate property recommendation algorithm\nconst recommendations = [];\nconst basePrice = lead.budget_max || 500000;\nconst location = lead.desired_location || 'Toronto';\nconst propertyType = lead.property_type || 'House';\nconst bedrooms = lead.bedrooms_min || 2;\nconst bathrooms = lead.bathrooms_min || 1;\n\n// Generate sample properties (in real implementation, this would query MLS or property database)\nconst propertyTypes = ['House', 'Condo', 'Townhouse'];\nconst neighborhoods = {\n  'Toronto': ['Downtown', 'Midtown', 'North York', 'Etobicoke', 'Scarborough'],\n  'Vancouver': ['Downtown', 'West End', 'Kitsilano', 'Richmond', 'Burnaby'],\n  'Montreal': ['Downtown', 'Plateau', 'Westmount', 'Outremont', 'NDG']\n};\n\nconst locationNeighborhoods = neighborhoods[location] || ['Downtown', 'Suburb', 'Central'];\n\nfor (let i = 0; i < 8; i++) {\n  const priceVariation = (Math.random() * 0.4 - 0.2); // ±20% price variation\n  const price = Math.round(basePrice * (1 + priceVariation));\n  const bedroomVariation = Math.floor(Math.random() * 2); // 0-1 extra bedrooms\n  const bathroomVariation = Math.round(Math.random() * 1.5 * 10) / 10; // 0-1.5 extra bathrooms\n  \n  const property = {\n    id: `prop-${Date.now()}-${i}`,\n    address: `${100 + i * 50} ${['Main', 'Oak', 'Elm', 'Pine', 'Cedar'][i % 5]} Street`,\n    neighborhood: locationNeighborhoods[i % locationNeighborhoods.length],\n    city: location,\n    price: price,\n    propertyType: i % 3 === 0 ? propertyType : propertyTypes[Math.floor(Math.random() * propertyTypes.length)],\n    bedrooms: bedrooms + bedroomVariation,\n    bathrooms: bathrooms + bathroomVariation,\n    sqft: Math.round(800 + Math.random() * 1200),\n    yearBuilt: Math.round(1980 + Math.random() * 43),\n    daysOnMarket: Math.round(Math.random() * 60),\n    features: [\n      'Updated Kitchen',\n      'Hardwood Floors',\n      'Parking',\n      'Garden',\n      'Fireplace',\n      'Walk-in Closet'\n    ].sort(() => 0.5 - Math.random()).slice(0, 3 + Math.floor(Math.random() * 3)),\n    matchScore: Math.round(60 + Math.random() * 35), // 60-95% match\n    pricePerSqft: 0,\n    marketTrend: Math.random() > 0.5 ? 'increasing' : 'stable',\n    virtualTourAvailable: Math.random() > 0.6,\n    openHouseScheduled: Math.random() > 0.7\n  };\n  \n  property.pricePerSqft = Math.round(property.price / property.sqft);\n  \n  // Add match reasoning\n  const matchReasons = [];\n  if (property.propertyType === lead.property_type) matchReasons.push('Matches preferred property type');\n  if (property.bedrooms >= bedrooms) matchReasons.push('Meets bedroom requirements');\n  if (property.bathrooms >= bathrooms) matchReasons.push('Meets bathroom requirements');\n  if (property.price <= basePrice * 1.1) matchReasons.push('Within budget range');\n  if (property.daysOnMarket < 30) matchReasons.push('Recently listed');\n  \n  property.matchReasons = matchReasons;\n  recommendations.push(property);\n}\n\n// Sort by match score descending\nrecommendations.sort((a, b) => b.matchScore - a.matchScore);\n\n// Generate market insights for the area\nconst marketInsights = {\n  location: location,\n  averagePrice: Math.round(recommendations.reduce((sum, p) => sum + p.price, 0) / recommendations.length),\n  averageDaysOnMarket: Math.round(recommendations.reduce((sum, p) => sum + p.daysOnMarket, 0) / recommendations.length),\n  priceRange: {\n    min: Math.min(...recommendations.map(p => p.price)),\n    max: Math.max(...recommendations.map(p => p.price))\n  },\n  totalListings: recommendations.length + Math.round(Math.random() * 50),\n  newListingsThisWeek: Math.round(Math.random() * 15) + 3,\n  marketTrend: {\n    direction: Math.random() > 0.5 ? 'up' : 'stable',\n    percentage: Math.round(Math.random() * 10) / 10\n  },\n  competitionLevel: Math.random() > 0.6 ? 'high' : Math.random() > 0.3 ? 'moderate' : 'low',\n  recommendedActions: [\n    'Get pre-approved for financing',\n    'Schedule viewings for top matches',\n    'Consider making competitive offers',\n    'Review market comparables'\n  ]\n};\n\n// Add personalized recommendations\nconst personalizedTips = [];\nif (lead.budget_max && lead.budget_max > 600000) {\n  personalizedTips.push('Consider luxury features and prime locations within your budget');\n}\nif (lead.priority === 'High') {\n  personalizedTips.push('Act quickly on desirable properties - high competition expected');\n}\nif (!lead.phone_number) {\n  personalizedTips.push('Provide phone contact for immediate notifications on new listings');\n}\n\nreturn {\n  leadId: lead.lead_id,\n  recommendations: recommendations.slice(0, 6), // Top 6 recommendations\n  marketInsights,\n  personalizedTips,\n  searchCriteria: {\n    location: location,\n    propertyType: propertyType,\n    minBedrooms: bedrooms,\n    minBathrooms: bathrooms,\n    maxBudget: basePrice\n  },\n  lastUpdated: new Date().toISOString(),\n  totalMatches: recommendations.length\n};"
+      },
+      "name": "Generate Property Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate comprehensive market insights\nconst params = $input.all()[0].json;\n\n// Simulate market data (in real implementation, this would query real estate APIs)\nconst marketData = {\n  location: params.location,\n  reportDate: new Date().toISOString(),\n  timeframe: params.timeframe,\n  \n  // Overall market statistics\n  overallStats: {\n    totalActiveListings: Math.round(500 + Math.random() * 1000),\n    newListingsThisMonth: Math.round(50 + Math.random() * 150),\n    averageDaysOnMarket: Math.round(15 + Math.random() * 30),\n    averagePrice: Math.round(450000 + Math.random() * 300000),\n    medianPrice: Math.round(400000 + Math.random() * 250000),\n    pricePerSqft: Math.round(400 + Math.random() * 300),\n    inventoryLevel: Math.random() > 0.5 ? 'low' : Math.random() > 0.3 ? 'moderate' : 'high'\n  },\n  \n  // Price trends\n  priceTrends: {\n    monthOverMonth: {\n      change: Math.round((Math.random() * 10 - 3) * 10) / 10, // -3% to +7%\n      direction: null\n    },\n    yearOverYear: {\n      change: Math.round((Math.random() * 20 - 5) * 10) / 10, // -5% to +15%\n      direction: null\n    },\n    forecast: {\n      nextQuarter: Math.random() > 0.6 ? 'increasing' : Math.random() > 0.3 ? 'stable' : 'decreasing',\n      confidence: Math.round(70 + Math.random() * 25) // 70-95% confidence\n    }\n  },\n  \n  // Property type breakdown\n  propertyTypes: [\n    {\n      type: 'House',\n      averagePrice: Math.round(600000 + Math.random() * 400000),\n      inventory: Math.round(100 + Math.random() * 200),\n      daysOnMarket: Math.round(20 + Math.random() * 25)\n    },\n    {\n      type: 'Condo',\n      averagePrice: Math.round(350000 + Math.random() * 250000),\n      inventory: Math.round(150 + Math.random() * 300),\n      daysOnMarket: Math.round(15 + Math.random() * 20)\n    },\n    {\n      type: 'Townhouse',\n      averagePrice: Math.round(500000 + Math.random() * 300000),\n      inventory: Math.round(80 + Math.random() * 150),\n      daysOnMarket: Math.round(18 + Math.random() * 22)\n    }\n  ],\n  \n  // Neighborhood analysis\n  neighborhoods: [\n    {\n      name: 'Downtown',\n      averagePrice: Math.round(700000 + Math.random() * 500000),\n      priceChange: Math.round((Math.random() * 12 - 2) * 10) / 10,\n      walkScore: Math.round(80 + Math.random() * 20),\n      schoolRating: Math.round(7 + Math.random() * 3),\n      trend: Math.random() > 0.4 ? 'hot' : 'stable'\n    },\n    {\n      name: 'Midtown',\n      averagePrice: Math.round(550000 + Math.random() * 350000),\n      priceChange: Math.round((Math.random() * 10 - 1) * 10) / 10,\n      walkScore: Math.round(70 + Math.random() * 20),\n      schoolRating: Math.round(6 + Math.random() * 4),\n      trend: Math.random() > 0.5 ? 'emerging' : 'stable'\n    },\n    {\n      name: 'Suburb',\n      averagePrice: Math.round(450000 + Math.random() * 250000),\n      priceChange: Math.round((Math.random() * 8 - 1) * 10) / 10,\n      walkScore: Math.round(50 + Math.random() * 30),\n      schoolRating: Math.round(7 + Math.random() * 3),\n      trend: Math.random() > 0.6 ? 'family-friendly' : 'stable'\n    }\n  ],\n  \n  // Market indicators\n  indicators: {\n    buyerDemand: Math.random() > 0.5 ? 'high' : Math.random() > 0.3 ? 'moderate' : 'low',\n    sellerMotivation: Math.random() > 0.4 ? 'moderate' : Math.random() > 0.2 ? 'high' : 'low',\n    competitionLevel: Math.random() > 0.6 ? 'high' : Math.random() > 0.3 ? 'moderate' : 'low',\n    marketBalance: Math.random() > 0.5 ? 'seller_market' : Math.random() > 0.3 ? 'balanced' : 'buyer_market'\n  },\n  \n  // Economic factors\n  economicFactors: {\n    interestRates: {\n      current: Math.round((4 + Math.random() * 3) * 100) / 100, // 4-7%\n      trend: Math.random() > 0.5 ? 'rising' : Math.random() > 0.3 ? 'stable' : 'falling'\n    },\n    employment: {\n      rate: Math.round((92 + Math.random() * 6) * 10) / 10, // 92-98%\n      trend: Math.random() > 0.6 ? 'improving' : 'stable'\n    },\n    populationGrowth: {\n      rate: Math.round((1 + Math.random() * 2) * 10) / 10, // 1-3%\n      impact: 'positive'\n    }\n  },\n  \n  // Seasonal factors\n  seasonalFactors: {\n    currentSeason: {\n      name: new Date().getMonth() < 3 || new Date().getMonth() > 10 ? 'winter' : new Date().getMonth() < 6 ? 'spring' : new Date().getMonth() < 9 ? 'summer' : 'fall',\n      typicalActivity: null,\n      buyerBehavior: null\n    }\n  },\n  \n  // Recommendations\n  recommendations: {\n    forBuyers: [\n      'Get pre-approved to act quickly on good properties',\n      'Consider slightly expanding your search criteria',\n      'Be prepared to make competitive offers in desirable areas',\n      'Schedule viewings promptly for new listings'\n    ],\n    forSellers: [\n      'Price competitively based on recent comparables',\n      'Stage your home to stand out from competition',\n      'Consider timing based on seasonal trends',\n      'Highlight unique features and recent updates'\n    ],\n    timing: {\n      bestTimeToList: 'Spring months typically see highest activity',\n      bestTimeToBuy: 'Winter months may offer better negotiating power',\n      marketCycle: 'Currently in a ' + (Math.random() > 0.5 ? 'seller' : 'buyer') + ' market phase'\n    }\n  }\n};\n\n// Set trend directions\nmarketData.priceTrends.monthOverMonth.direction = marketData.priceTrends.monthOverMonth.change > 0 ? 'up' : marketData.priceTrends.monthOverMonth.change < 0 ? 'down' : 'stable';\nmarketData.priceTrends.yearOverYear.direction = marketData.priceTrends.yearOverYear.change > 0 ? 'up' : marketData.priceTrends.yearOverYear.change < 0 ? 'down' : 'stable';\n\n// Set seasonal activity\nconst season = marketData.seasonalFactors.currentSeason.name;\nconst seasonalData = {\n  spring: { activity: 'high', behavior: 'aggressive_buying' },\n  summer: { activity: 'moderate', behavior: 'family_focused' },\n  fall: { activity: 'moderate', behavior: 'strategic_buying' },\n  winter: { activity: 'low', behavior: 'patient_shopping' }\n};\n\nmarketData.seasonalFactors.currentSeason.typicalActivity = seasonalData[season].activity;\nmarketData.seasonalFactors.currentSeason.buyerBehavior = seasonalData[season].behavior;\n\nreturn marketData;"
+      },
+      "name": "Generate Market Insights",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        640,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Log property recommendation generation\nINSERT INTO interactions (lead_id, user_id, type, content, interaction_date, created_at)\nVALUES (\n  {{ $json.leadId }},\n  1, -- System user\n  'System Generated',\n  'AI Property Recommendations Generated\\n\\nTotal Recommendations: {{ $json.totalMatches }}\\nTop Match Score: {{ $json.recommendations[0].matchScore }}%\\nSearch Criteria: {{ $json.searchCriteria.propertyType }} in {{ $json.searchCriteria.location }}\\nBudget: Up to ${{ $json.searchCriteria.maxBudget }}',\n  NOW(),\n  NOW()\n)\nRETURNING *;"
+      },
+      "name": "Log Recommendation Generation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Recommendations Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Market Insights Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        840,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseStatusCode": 401,
+        "responseBody": "{ \"error\": \"Unauthorized\" }"
+      },
+      "name": "Auth Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        340,
+        900
+      ]
+    }
+  ],
+  "connections": {
+    "Property Recommendations Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Market Insights Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Extract Lead ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Market": {
+      "main": [
+        [
+          {
+            "node": "Extract Market Params",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Lead ID": {
+      "main": [
+        [
+          {
+            "node": "Get Lead Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Market Params": {
+      "main": [
+        [
+          {
+            "node": "Generate Market Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead Details": {
+      "main": [
+        [
+          {
+            "node": "Generate Property Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Property Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Log Recommendation Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Market Insights": {
+      "main": [
+        [
+          {
+            "node": "Market Insights Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Recommendation Generation": {
+      "main": [
+        [
+          {
+            "node": "Recommendations Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/Toronto"
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "id": "market-insights-workflow",
+  "tags": []
+}

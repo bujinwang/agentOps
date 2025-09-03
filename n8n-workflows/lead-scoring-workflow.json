@@ -1,0 +1,425 @@
+{
+  "name": "AI Lead Scoring and Qualification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/webhook/leads/score",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Lead Scoring Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "lead-scoring"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/webhook/leads/qualify",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Lead Qualification Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        600
+      ],
+      "webhookId": "lead-qualification"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Lead Scoring Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Scoring",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Lead Qualification Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Qualification",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        340,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract lead data and calculate scoring factors\nconst leadData = $input.all()[0].json.body || {};\n\n// Basic demographic scoring\nlet demographicScore = 0;\nif (leadData.budget_max && leadData.budget_max > 500000) demographicScore += 30;\nelse if (leadData.budget_max && leadData.budget_max > 300000) demographicScore += 20;\nelse if (leadData.budget_max && leadData.budget_max > 100000) demographicScore += 10;\n\nif (leadData.desired_location && leadData.desired_location.toLowerCase().includes('downtown')) demographicScore += 15;\nif (leadData.property_type === 'House') demographicScore += 10;\nif (leadData.bedrooms_min >= 3) demographicScore += 10;\n\n// Engagement scoring\nlet engagementScore = 0;\nif (leadData.source === 'Website Form') engagementScore += 25;\nelse if (leadData.source === 'Referral') engagementScore += 35;\nelse if (leadData.source === 'Facebook Ad') engagementScore += 15;\nelse if (leadData.source === 'Google Ad') engagementScore += 20;\n\nif (leadData.phone_number) engagementScore += 15;\nif (leadData.notes && leadData.notes.length > 50) engagementScore += 10;\n\n// Urgency scoring\nlet urgencyScore = 0;\nif (leadData.priority === 'High') urgencyScore += 25;\nelse if (leadData.priority === 'Medium') urgencyScore += 15;\nelse urgencyScore += 5;\n\n// Calculate total score\nconst totalScore = Math.min(100, demographicScore + engagementScore + urgencyScore);\n\n// Determine score category\nlet scoreCategory = 'Cold';\nif (totalScore >= 80) scoreCategory = 'Hot';\nelse if (totalScore >= 60) scoreCategory = 'Warm';\nelse if (totalScore >= 40) scoreCategory = 'Lukewarm';\n\n// Generate insights\nconst insights = [];\nif (leadData.budget_max > 500000) insights.push('High-value prospect with strong buying power');\nif (leadData.source === 'Referral') insights.push('Referral leads have higher conversion rates');\nif (!leadData.phone_number) insights.push('Missing phone contact - consider requesting via follow-up');\nif (leadData.desired_location) insights.push(`Interested in ${leadData.desired_location} - prepare local market data`);\nif (leadData.bedrooms_min >= 4) insights.push('Large family needs - highlight family-friendly features');\n\nreturn {\n  leadId: leadData.lead_id || leadData.leadId,\n  totalScore,\n  scoreCategory,\n  scoreBreakdown: {\n    demographic: demographicScore,\n    engagement: engagementScore,\n    urgency: urgencyScore\n  },\n  insights,\n  recommendedActions: [\n    totalScore >= 70 ? 'Schedule immediate follow-up call' : 'Add to nurturing campaign',\n    leadData.budget_max > 400000 ? 'Prepare luxury property portfolio' : 'Focus on value propositions',\n    !leadData.phone_number ? 'Request phone contact in next interaction' : 'Phone follow-up recommended'\n  ].filter(Boolean)\n};"
+      },
+      "name": "Calculate Lead Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Advanced lead qualification using multiple criteria\nconst leadData = $input.all()[0].json.body || {};\n\n// BANT Qualification (Budget, Authority, Need, Timeline)\nlet bantScore = 0;\nlet qualificationNotes = [];\n\n// Budget qualification\nif (leadData.budget_max) {\n  if (leadData.budget_max >= 200000) {\n    bantScore += 25;\n    qualificationNotes.push('Budget: Qualified - has realistic budget expectations');\n  } else {\n    bantScore += 10;\n    qualificationNotes.push('Budget: Partially qualified - may need budget education');\n  }\n} else {\n  qualificationNotes.push('Budget: Unqualified - budget needs to be determined');\n}\n\n// Authority (inferred from data quality and engagement)\nif (leadData.phone_number && leadData.email) {\n  bantScore += 20;\n  qualificationNotes.push('Authority: Good contact information suggests decision-maker');\n} else {\n  bantScore += 5;\n  qualificationNotes.push('Authority: Limited contact info - may need to identify decision-maker');\n}\n\n// Need (based on property preferences)\nif (leadData.property_type && leadData.desired_location) {\n  bantScore += 25;\n  qualificationNotes.push('Need: Clear property requirements indicate genuine interest');\n} else {\n  bantScore += 10;\n  qualificationNotes.push('Need: Vague requirements - needs more discovery');\n}\n\n// Timeline (inferred from source and engagement level)\nif (leadData.source === 'Website Form' || leadData.source === 'Referral') {\n  bantScore += 20;\n  qualificationNotes.push('Timeline: Active lead source suggests current interest');\n} else {\n  bantScore += 10;\n  qualificationNotes.push('Timeline: May need timeline qualification');\n}\n\n// Additional qualification factors\nlet additionalScore = 0;\nif (leadData.notes && leadData.notes.length > 100) {\n  additionalScore += 10;\n  qualificationNotes.push('Engagement: Detailed notes indicate high engagement');\n}\n\nif (leadData.priority === 'High') {\n  additionalScore += 15;\n  qualificationNotes.push('Priority: Marked as high priority by team');\n}\n\n// Calculate total qualification score\nconst totalQualificationScore = Math.min(100, bantScore + additionalScore);\n\n// Determine qualification status\nlet qualificationStatus = 'Unqualified';\nlet nextSteps = [];\n\nif (totalQualificationScore >= 80) {\n  qualificationStatus = 'Highly Qualified';\n  nextSteps = [\n    'Schedule property viewing immediately',\n    'Prepare personalized property recommendations',\n    'Set up mortgage pre-approval if needed'\n  ];\n} else if (totalQualificationScore >= 60) {\n  qualificationStatus = 'Qualified';\n  nextSteps = [\n    'Conduct detailed needs analysis call',\n    'Send relevant property listings',\n    'Schedule follow-up within 48 hours'\n  ];\n} else if (totalQualificationScore >= 40) {\n  qualificationStatus = 'Partially Qualified';\n  nextSteps = [\n    'Gather missing qualification information',\n    'Add to lead nurturing campaign',\n    'Schedule qualification call within 1 week'\n  ];\n} else {\n  nextSteps = [\n    'Add to long-term nurturing campaign',\n    'Focus on education and value building',\n    'Re-qualify in 30 days'\n  ];\n}\n\n// Risk assessment\nconst riskFactors = [];\nif (!leadData.phone_number) riskFactors.push('No phone contact available');\nif (!leadData.budget_max) riskFactors.push('Budget unknown');\nif (!leadData.desired_location) riskFactors.push('Location preferences unclear');\nif (leadData.source === 'Cold Call') riskFactors.push('Cold lead - may have lower conversion rate');\n\nreturn {\n  leadId: leadData.lead_id || leadData.leadId,\n  qualificationScore: totalQualificationScore,\n  qualificationStatus,\n  bantBreakdown: {\n    budget: leadData.budget_max ? 'Qualified' : 'Needs qualification',\n    authority: leadData.phone_number ? 'Likely decision maker' : 'Needs identification',\n    need: leadData.property_type ? 'Clear requirements' : 'Needs discovery',\n    timeline: leadData.source === 'Website Form' ? 'Active interest' : 'Needs qualification'\n  },\n  qualificationNotes,\n  nextSteps,\n  riskFactors,\n  conversionProbability: Math.round(totalQualificationScore * 0.8), // Rough conversion estimate\n  recommendedFollowUpTime: totalQualificationScore >= 70 ? '24 hours' : totalQualificationScore >= 50 ? '48 hours' : '1 week'\n};"
+      },
+      "name": "Qualify Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        440,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Update lead with AI scoring results\nUPDATE leads SET \n  ai_summary = CONCAT(\n    COALESCE(ai_summary, ''), \n    '\\n\\nAI Scoring Results (', NOW(), '):\\n',\n    'Score: {{ $json.totalScore }}/100 ({{ $json.scoreCategory }})\\n',\n    'Breakdown: Demographics {{ $json.scoreBreakdown.demographic }}, Engagement {{ $json.scoreBreakdown.engagement }}, Urgency {{ $json.scoreBreakdown.urgency }}\\n',\n    'Key Insights: {{ $json.insights.join('; ') }}\\n',\n    'Recommended Actions: {{ $json.recommendedActions.join('; ') }}'\n  ),\n  updated_at = NOW()\nWHERE lead_id = {{ $json.leadId }}\nRETURNING *;"
+      },
+      "name": "Update Lead Score",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Update lead with qualification results\nUPDATE leads SET \n  ai_summary = CONCAT(\n    COALESCE(ai_summary, ''), \n    '\\n\\nAI Qualification Results (', NOW(), '):\\n',\n    'Status: {{ $json.qualificationStatus }} ({{ $json.qualificationScore }}/100)\\n',\n    'BANT: Budget {{ $json.bantBreakdown.budget }}, Authority {{ $json.bantBreakdown.authority }}, Need {{ $json.bantBreakdown.need }}, Timeline {{ $json.bantBreakdown.timeline }}\\n',\n    'Conversion Probability: {{ $json.conversionProbability }}%\\n',\n    'Follow-up Recommended: {{ $json.recommendedFollowUpTime }}\\n',\n    'Next Steps: {{ $json.nextSteps.join('; ') }}'\n    {{ $json.riskFactors.length > 0 ? '\\nRisk Factors: ' + $json.riskFactors.join('; ') : '' }}\n  ),\n  -- Update priority based on qualification\n  priority = CASE \n    WHEN {{ $json.qualificationScore }} >= 80 THEN 'High'\n    WHEN {{ $json.qualificationScore }} >= 60 THEN 'Medium'\n    ELSE priority\n  END,\n  updated_at = NOW()\nWHERE lead_id = {{ $json.leadId }}\nRETURNING *;"
+      },
+      "name": "Update Lead Qualification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        640,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.totalScore }}",
+              "operation": "largerEqual",
+              "value2": 70
+            }
+          ]
+        }
+      },
+      "name": "High Score Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.qualificationStatus }}",
+              "operation": "equals",
+              "value2": "Highly Qualified"
+            }
+          ]
+        }
+      },
+      "name": "Highly Qualified Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        840,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Create automatic follow-up task for high-score leads\nINSERT INTO tasks (title, description, priority, due_date, lead_id, created_by, created_at)\nVALUES (\n  'High Priority Lead Follow-up',\n  'This lead scored {{ $json.totalScore }}/100 in AI scoring. Immediate follow-up recommended.\\n\\nKey Insights: {{ $json.insights.join('; ') }}\\n\\nRecommended Actions: {{ $json.recommendedActions.join('; ') }}',\n  'High',\n  NOW() + INTERVAL '2 hours',\n  {{ $json.leadId }},\n  1, -- Default system user\n  NOW()\n)\nRETURNING *;"
+      },
+      "name": "Create High Score Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        250
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Create qualification follow-up task\nINSERT INTO tasks (title, description, priority, due_date, lead_id, created_by, created_at)\nVALUES (\n  'Highly Qualified Lead - Immediate Action',\n  'Lead qualification score: {{ $json.qualificationScore }}/100\\n\\nNext Steps:\\n{{ $json.nextSteps.join('\\n') }}\\n\\nConversion Probability: {{ $json.conversionProbability }}%',\n  'High',\n  NOW() + INTERVAL '1 hour',\n  {{ $json.leadId }},\n  1, -- Default system user\n  NOW()\n)\nRETURNING *;"
+      },
+      "name": "Create Qualification Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        550
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"message\": \"Lead scoring completed\", \"data\": $json }"
+      },
+      "name": "Scoring Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"message\": \"Lead qualification completed\", \"data\": $json }"
+      },
+      "name": "Qualification Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseStatusCode": 401,
+        "responseBody": "{ \"error\": \"Unauthorized\" }"
+      },
+      "name": "Auth Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        340,
+        900
+      ]
+    }
+  ],
+  "connections": {
+    "Lead Scoring Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Qualification Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Qualification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Scoring": {
+      "main": [
+        [
+          {
+            "node": "Calculate Lead Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Qualification": {
+      "main": [
+        [
+          {
+            "node": "Qualify Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Lead Score": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualify Lead": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Qualification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Score": {
+      "main": [
+        [
+          {
+            "node": "High Score Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Qualification": {
+      "main": [
+        [
+          {
+            "node": "Highly Qualified Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Score Check": {
+      "main": [
+        [
+          {
+            "node": "Create High Score Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Scoring Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Highly Qualified Check": {
+      "main": [
+        [
+          {
+            "node": "Create Qualification Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Qualification Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create High Score Task": {
+      "main": [
+        [
+          {
+            "node": "Scoring Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Qualification Task": {
+      "main": [
+        [
+          {
+            "node": "Qualification Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/Toronto"
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "id": "lead-scoring-workflow",
+  "tags": []
+}
