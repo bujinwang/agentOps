@@ -1,13 +1,58 @@
-# Real Estate CRM - AI-Powered Mobile Application
+# 🏠 Real Estate CRM Mobile App
 
-A comprehensive Real Estate CRM system built with React Native, n8n workflow automation, PostgreSQL, and OpenAI integration.
+A comprehensive, open-source React Native mobile application for real estate professionals to manage leads, tasks, and client interactions with advanced AI automation and offline capabilities.
 
-## Architecture Overview
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![React Native](https://img.shields.io/badge/React%20Native-0.72.4-blue.svg)](https://reactnative.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-4.8.4-blue.svg)](https://www.typescriptlang.org/)
+[![n8n](https://img.shields.io/badge/n8n-automation-orange.svg)](https://n8n.io/)
 
-- **Frontend**: React Native mobile application
+## ✨ Features
+
+### 🏠 Lead Management
+- Complete CRUD operations for leads
+- Lead categorization and status tracking
+- Contact information and interaction history
+- Property details and preferences
+- AI-powered lead scoring and qualification
+
+### 📋 Task Management
+- Create and manage tasks with priorities
+- Task categories (call, email, meeting, follow-up)
+- Due date tracking and notifications
+- Task completion and progress tracking
+
+### 📅 Calendar Integration
+- Visual calendar with tasks and appointments
+- Event categorization with color coding
+- Monthly, weekly, and daily views
+- Meeting scheduling and reminders
+
+### 🔄 Offline-First Architecture
+- Complete offline functionality
+- Automatic data synchronization
+- Conflict resolution and pending actions queue
+- Storage usage monitoring
+
+### ⚙️ Advanced Settings
+- Theme customization (light/dark/system)
+- Notification preferences
+- Data sync settings and privacy controls
+- Profile management
+
+### 🤖 AI-Powered Automation
+- Intelligent lead scoring using BANT methodology
+- Automated follow-up workflows
+- Market insights and analytics
+- Lead qualification and routing
+
+## 🏗️ Architecture Overview
+
+- **Frontend**: React Native mobile application with TypeScript
 - **Backend**: n8n workflow automation (API via webhooks)
 - **Database**: PostgreSQL with comprehensive schema
 - **AI Integration**: OpenAI for lead analysis and prioritization
+- **State Management**: React Context API with offline support
 
 ## Quick Start
 
