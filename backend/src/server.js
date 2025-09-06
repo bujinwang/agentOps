@@ -12,7 +12,7 @@ const rateLimit = require('express-rate-limit');
 const { connectDatabase } = require('./config/database');
 const { connectRedis } = require('./config/redis');
 const { logger } = require('./config/logger');
-const { swaggerDocs } = require('./config/swagger');
+// const { swaggerDocs } = require('./config/swagger'); // Temporarily disabled
 const { initializeMetrics, metricsMiddleware, metricsEndpoint } = require('./config/metrics');
 const {
   requestMonitor,
@@ -21,12 +21,18 @@ const {
   performanceMonitor,
   memoryMonitor
 } = require('./middleware/monitoring');
-const errorHandler = require('./middleware/errorHandler');
+const { errorHandler } = require('./middleware/errorHandler');
 
 // Import routes
 const authRoutes = require('./routes/auth');
 const leadRoutes = require('./routes/leads');
-const userRoutes = require('./routes/users');
+const taskRoutes = require('./routes/tasks');
+const interactionRoutes = require('./routes/interactions');
+const analyticsRoutes = require('./routes/analytics');
+const searchRoutes = require('./routes/search');
+const notificationRoutes = require('./routes/notifications');
+const fileRoutes = require('./routes/files');
+const profileRoutes = require('./routes/profile');
 
 // Import job queues
 const { setupJobQueues } = require('./jobs/setup');
@@ -96,13 +102,22 @@ app.get('/health', healthCheck);
 app.get('/health/detailed', detailedHealthCheck);
 app.get('/metrics', metricsEndpoint);
 
-// API routes
+// API routes - unified endpoint structure
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/interactions', interactionRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/profile', profileRoutes);
 
-// Swagger API documentation
-swaggerDocs(app, PORT);
+// Remove duplicate webhook routes - use API endpoints only
+// Frontend should connect to /api/* endpoints, not webhook routes
+
+// Swagger API documentation - temporarily disabled
+// swaggerDocs(app, PORT);
 
 // 404 handler
 app.use('*', (req, res) => {

@@ -210,4 +210,58 @@ router.put('/profile', authenticate, [
   }
 });
 
+// Change password endpoint
+router.put('/change-password', authenticate, [
+  body('currentPassword')
+    .notEmpty()
+    .withMessage('Current password is required'),
+  body('newPassword')
+    .isLength({ min: VALIDATION_RULES.PASSWORD_MIN_LENGTH })
+    .withMessage(`New password must be at least ${VALIDATION_RULES.PASSWORD_MIN_LENGTH} characters long`)
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('New password must contain at least one uppercase letter, one lowercase letter, and one number')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const user = req.user;
+    const { currentPassword, newPassword } = req.body;
+
+    // Find user with password hash
+    const userResult = await User.findByEmail(user.email);
+    
+    if (!userResult) {
+      return res.status(404).json({
+        error: 'User not found',
+        message: ERROR_MESSAGES.USER_NOT_FOUND
+      });
+    }
+
+    const { passwordHash } = userResult;
+
+    // Verify current password
+    const isCurrentPasswordValid = await User.verifyPassword(currentPassword, passwordHash);
+    
+    if (!isCurrentPasswordValid) {
+      return res.status(400).json({
+        error: 'Invalid current password',
+        message: 'Current password is incorrect'
+      });
+    }
+
+    // Update password
+    await user.updateProfile({ password: newPassword });
+
+    logger.info(`Password changed for user: ${user.email}`);
+
+    res.json({
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    logger.error('Error changing password:', error);
+    res.status(500).json({
+      error: 'Failed to change password',
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
 module.exports = router;

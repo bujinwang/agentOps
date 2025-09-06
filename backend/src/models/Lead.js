@@ -1,6 +1,6 @@
 
 const { getDatabase } = require('../config/database');
-const { LEAD_PRIORITY } = require('../config/constants');
+const { LEAD_PRIORITY, INTERACTION_TYPES } = require('../config/constants');
 
 class Lead {
   constructor(data) {
@@ -198,6 +198,149 @@ class Lead {
     const query = 'DELETE FROM leads WHERE lead_id = $1 AND user_id = $2 RETURNING lead_id';
     const result = await db.query(query, [leadId, userId]);
     return result.rows.length > 0;
+  }
+
+  // Assign lead to a different user
+  static async assignLead(leadId, fromUserId, toUserId, assignmentNotes = null) {
+    const db = getDatabase();
+    
+    // First verify the lead belongs to the fromUser
+    const checkQuery = 'SELECT * FROM leads WHERE lead_id = $1 AND user_id = $2 LIMIT 1';
+    const checkResult = await db.query(checkQuery, [leadId, fromUserId]);
+    
+    if (checkResult.rows.length === 0) {
+      throw new Error('Lead not found or access denied');
+    }
+    
+    const lead = checkResult.rows[0];
+    const oldUserId = lead.user_id;
+    
+    // Update the lead assignment
+    const updateQuery = `
+      UPDATE leads
+      SET user_id = $1, updated_at = NOW()
+      WHERE lead_id = $2 AND user_id = $3
+      RETURNING *
+    `;
+    
+    const result = await db.query(updateQuery, [toUserId, leadId, fromUserId]);
+    
+    if (result.rows.length === 0) {
+      throw new Error('Failed to assign lead');
+    }
+    
+    // Log the assignment as an interaction
+    try {
+      const Interaction = require('./Interaction');
+      const assignmentContent = assignmentNotes
+        ? `Lead assigned to user ${toUserId}. Notes: ${assignmentNotes}`
+        : `Lead assigned to user ${toUserId}`;
+      
+      await Interaction.create({
+        userId: fromUserId,
+        leadId: leadId,
+        type: INTERACTION_TYPES.NOTE_ADDED, // Using NOTE_ADDED for assignment logging
+        content: assignmentContent
+      });
+    } catch (interactionError) {
+      // Log the error but don't fail the assignment
+      console.warn('Failed to log lead assignment interaction:', interactionError);
+    }
+    
+    return new Lead(result.rows[0]);
+  }
+
+  // Get unassigned leads (leads with no user assignment)
+  static async getUnassignedLeads(limit = 50, page = 1) {
+    const db = getDatabase();
+    const validPage = Math.max(1, parseInt(page));
+    const validLimit = Math.min(Math.max(1, parseInt(limit)), 200);
+    const offset = (validPage - 1) * validLimit;
+    
+    const query = `
+      SELECT * FROM leads
+      WHERE user_id IS NULL OR user_id = 0
+      ORDER BY created_at DESC
+      LIMIT $1 OFFSET $2
+    `;
+    
+    const result = await db.query(query, [validLimit, offset]);
+    
+    return {
+      data: result.rows.map(row => new Lead(row)),
+      pagination: {
+        currentPage: validPage,
+        totalPages: Math.ceil(result.rows.length / validLimit),
+        totalItems: result.rows.length,
+        limit: validLimit
+      }
+    };
+  }
+
+  // Get leads assigned to a specific user
+  static async getAssignedLeads(userId, filters = {}, pagination = {}) {
+    const db = getDatabase();
+    const { status, priority, searchTerm, page = 1, limit = 50 } = filters;
+    
+    const validPage = Math.max(1, parseInt(page));
+    const validLimit = Math.min(Math.max(1, parseInt(limit)), 200);
+    const offset = (validPage - 1) * validLimit;
+    
+    let whereConditions = ['user_id = $1'];
+    let queryParams = [userId];
+    let paramIndex = 1;
+    
+    if (status) {
+      paramIndex++;
+      whereConditions.push(`status = $${paramIndex}`);
+      queryParams.push(status);
+    }
+    
+    if (priority) {
+      paramIndex++;
+      whereConditions.push(`priority = $${paramIndex}`);
+      queryParams.push(priority);
+    }
+    
+    if (searchTerm) {
+      paramIndex++;
+      whereConditions.push(`(first_name ILIKE $${paramIndex} OR last_name ILIKE $${paramIndex} OR email ILIKE $${paramIndex})`);
+      queryParams.push(`%${searchTerm}%`);
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+    const query = `
+      SELECT * FROM leads
+      ${whereClause}
+      ORDER BY created_at DESC
+      LIMIT $${paramIndex + 1} OFFSET $${paramIndex + 2}
+    `;
+    
+    queryParams.push(validLimit, offset);
+    
+    const countQuery = `SELECT COUNT(*) as total FROM leads ${whereClause}`;
+    const countParams = queryParams.slice(0, paramIndex);
+    
+    const [leadsResult, countResult] = await Promise.all([
+      db.query(query, queryParams),
+      db.query(countQuery, countParams)
+    ]);
+    
+    const totalItems = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalItems / validLimit);
+    
+    return {
+      data: leadsResult.rows.map(row => new Lead(row)),
+      pagination: {
+        currentPage: validPage,
+        totalPages: totalPages,
+        totalItems: totalItems,
+        limit: validLimit,
+        hasNext: validPage < totalPages,
+        hasPrev: validPage > 1
+      }
+    };
   }
 
   // Sanitize lead data for response
