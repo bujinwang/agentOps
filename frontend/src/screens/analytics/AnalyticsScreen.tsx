@@ -8,9 +8,18 @@ import {
   TouchableOpacity,
   Dimensions,
   ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import { apiService } from '../../services/api';
 import { formatCurrency, formatDate } from '../../utils/validation';
+import MaterialChart from '../../components/MaterialChart';
+import MaterialKPICard from '../../components/MaterialKPICard';
+import { 
+  MaterialColors, 
+  MaterialElevation, 
+  MaterialSpacing, 
+  MaterialTypography 
+} from '../../styles/MaterialDesign';
 
 interface AnalyticsScreenProps {
   navigation: any;
@@ -41,7 +50,6 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
   const [timeframe, setTimeframe] = useState<'week' | 'month' | 'quarter'>('month');
 
   const screenWidth = Dimensions.get('window').width;
-  const cardWidth = (screenWidth - 48) / 2;
 
   useEffect(() => {
     loadAnalyticsData();
@@ -74,15 +82,25 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
     loadAnalyticsData(true);
   };
 
-  const renderTimeframeTabs = () => (
-    <View style={styles.timeframeTabs}>
+  const handleTimeframeChange = (period: 'week' | 'month' | 'quarter') => {
+    setTimeframe(period);
+  };
+
+  const renderTimeframeSelector = () => (
+    <View style={styles.timeframeContainer}>
       {(['week', 'month', 'quarter'] as const).map((period) => (
         <TouchableOpacity
           key={period}
-          style={[styles.timeframeTab, timeframe === period && styles.activeTimeframeTab]}
-          onPress={() => setTimeframe(period)}
+          style={[
+            styles.timeframeButton,
+            timeframe === period && styles.timeframeButtonActive
+          ]}
+          onPress={() => handleTimeframeChange(period)}
         >
-          <Text style={[styles.timeframeTabText, timeframe === period && styles.activeTimeframeTabText]}>
+          <Text style={[
+            styles.timeframeButtonText,
+            timeframe === period && styles.timeframeButtonTextActive
+          ]}>
             {period.charAt(0).toUpperCase() + period.slice(1)}
           </Text>
         </TouchableOpacity>
@@ -90,65 +108,127 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
     </View>
   );
 
-  const renderStatsCard = (title: string, value: string | number, subtitle?: string, color?: string) => (
-    <View style={[styles.statsCard, { width: cardWidth }]}>
-      <Text style={styles.statsCardTitle}>{title}</Text>
-      <Text style={[styles.statsCardValue, color && { color }]}>
-        {typeof value === 'number' ? value.toLocaleString() : value}
-      </Text>
-      {subtitle && (
-        <Text style={styles.statsCardSubtitle}>{subtitle}</Text>
-      )}
-    </View>
-  );
+  const renderKPIcards = () => {
+    if (!dashboardStats) return null;
 
-  const renderListCard = (title: string, data: Array<{ [key: string]: string | number }>, keyField: string, valueField: string) => (
-    <View style={styles.listCard}>
-      <Text style={styles.listCardTitle}>{title}</Text>
-      <View style={styles.listContent}>
-        {data.slice(0, 5).map((item, index) => {
-          const total = data.reduce((sum, d) => sum + Number(d[valueField]), 0);
-          const percentage = total > 0 ? ((Number(item[valueField]) / total) * 100).toFixed(1) : '0';
-          
-          return (
-            <View key={index} style={styles.listItem}>
-              <View style={styles.listItemLeft}>
-                <Text style={styles.listItemLabel}>{item[keyField]}</Text>
-                <Text style={styles.listItemValue}>{item[valueField]}</Text>
-              </View>
-              <View style={styles.progressBarContainer}>
-                <View 
-                  style={[
-                    styles.progressBar, 
-                    { width: `${percentage}%` }
-                  ]} 
-                />
-                <Text style={styles.percentageText}>{percentage}%</Text>
-              </View>
-            </View>
-          );
-        })}
+    const kpiData = [
+      {
+        title: 'Total Leads',
+        value: dashboardStats.totalLeads,
+        subtitle: 'All time',
+        color: MaterialColors.primary[500],
+        trend: { value: 12.5, isPositive: true }
+      },
+      {
+        title: 'New Leads',
+        value: dashboardStats.newLeads,
+        subtitle: 'This period',
+        color: MaterialColors.secondary[500],
+        trend: { value: 8.3, isPositive: true }
+      },
+      {
+        title: 'Active Tasks',
+        value: dashboardStats.activeTasks,
+        subtitle: 'Pending',
+        color: MaterialColors.warning[500],
+        trend: { value: 5.2, isPositive: false }
+      },
+      {
+        title: 'Conversion Rate',
+        value: `${dashboardStats.conversionRate.toFixed(1)}%`,
+        subtitle: 'Lead to client',
+        color: dashboardStats.conversionRate > 15 ? MaterialColors.secondary[500] : MaterialColors.error[500],
+        trend: { value: 2.1, isPositive: dashboardStats.conversionRate > 10 }
+      },
+      {
+        title: 'Leads This Month',
+        value: dashboardStats.leadsThisMonth,
+        subtitle: 'This month',
+        color: MaterialColors.primary[300],
+        trend: { value: 15.7, isPositive: true }
+      },
+      {
+        title: 'Completed Tasks',
+        value: dashboardStats.completedTasks,
+        subtitle: 'This period',
+        color: MaterialColors.secondary[300],
+        trend: { value: 22.4, isPositive: true }
+      }
+    ];
+
+    return (
+      <View style={styles.kpiContainer}>
+        {kpiData.map((kpi, index) => (
+          <MaterialKPICard
+            key={index}
+            title={kpi.title}
+            value={kpi.value}
+            subtitle={kpi.subtitle}
+            color={kpi.color}
+            trend={kpi.trend}
+            elevation={2}
+          />
+        ))}
       </View>
-    </View>
-  );
+    );
+  };
+
+  const renderLeadStatusChart = () => {
+    if (!leadStats?.leadsByStatus) return null;
+
+    const chartData = leadStats.leadsByStatus.map(item => ({
+      label: item.status,
+      value: item.count,
+      color: getStatusColor(item.status)
+    }));
+
+    return (
+      <MaterialChart
+        title="Leads by Status"
+        data={chartData}
+        type="bar"
+        height={250}
+        showValues={true}
+      />
+    );
+  };
+
+  const renderLeadSourceChart = () => {
+    if (!leadStats?.leadsBySource) return null;
+
+    const chartData = leadStats.leadsBySource.map(item => ({
+      label: item.source,
+      value: item.count
+    }));
+
+    return (
+      <MaterialChart
+        title="Leads by Source"
+        data={chartData}
+        type="pie"
+        height={250}
+        showValues={true}
+      />
+    );
+  };
 
   const renderConversionFunnel = () => {
-    if (!leadStats) return null;
+    if (!leadStats?.leadsByStatus) return null;
 
     const statusOrder = ['New', 'Contacted', 'Qualified', 'Showing Scheduled', 'Offer Made', 'Closed Won'];
-    const statusData = statusOrder.map(status => {
+    const funnelData = statusOrder.map(status => {
       const found = leadStats.leadsByStatus.find(s => s.status === status);
       return { status, count: found ? found.count : 0 };
     });
 
-    const maxCount = Math.max(...statusData.map(s => s.count));
+    const maxCount = Math.max(...funnelData.map(s => s.count));
 
     return (
-      <View style={styles.funnelCard}>
-        <Text style={styles.funnelCardTitle}>Lead Conversion Funnel</Text>
-        <View style={styles.funnelContent}>
-          {statusData.map((item, index) => {
-            const width = maxCount > 0 ? Math.max((item.count / maxCount) * 100, 10) : 10;
+      <View style={[styles.card, styles.funnelCard]}>
+        <Text style={styles.cardTitle}>Lead Conversion Funnel</Text>
+        <View style={styles.funnelContainer}>
+          {funnelData.map((item, index) => {
+            const width = maxCount > 0 ? Math.max((item.count / maxCount) * 100, 15) : 15;
             const color = getStatusColor(item.status);
             
             return (
@@ -174,60 +254,30 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
   };
 
   const getStatusColor = (status: string): string => {
-    switch (status) {
-      case 'New': return '#FF9800';
-      case 'Contacted': return '#2196F3';
-      case 'Qualified': return '#9C27B0';
-      case 'Showing Scheduled': return '#607D8B';
-      case 'Offer Made': return '#FF5722';
-      case 'Closed Won': return '#4CAF50';
-      default: return '#666';
-    }
-  };
-
-  const renderRecentActivity = () => {
-    if (!dashboardStats?.recentActivity?.length) return null;
-
-    return (
-      <View style={styles.activityCard}>
-        <Text style={styles.activityCardTitle}>Recent Activity</Text>
-        <View style={styles.activityList}>
-          {dashboardStats.recentActivity.slice(0, 10).map((activity, index) => (
-            <View key={index} style={styles.activityItem}>
-              <View style={styles.activityIcon}>
-                <Text style={styles.activityIconText}>
-                  {activity.type === 'Lead Created' ? '✨' : 
-                   activity.type === 'Email Sent' ? '📧' : 
-                   activity.type === 'Call Logged' ? '📞' : '📝'}
-                </Text>
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityType}>{activity.type}</Text>
-                <Text style={styles.activityDescription} numberOfLines={1}>
-                  {activity.content || `${activity.type} activity`}
-                </Text>
-                <Text style={styles.activityTime}>
-                  {formatDate(activity.interactionDate)}
-                </Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
-    );
+    const colors = {
+      'New': MaterialColors.primary[500],
+      'Contacted': MaterialColors.secondary[500],
+      'Qualified': MaterialColors.warning[500],
+      'Showing Scheduled': MaterialColors.neutral[600],
+      'Offer Made': MaterialColors.error[500],
+      'Closed Won': MaterialColors.secondary[700],
+      'Closed Lost': MaterialColors.neutral[500],
+      'Archived': MaterialColors.neutral[400],
+    };
+    return colors[status as keyof typeof colors] || MaterialColors.neutral[500];
   };
 
   if (isLoading && !dashboardStats) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={MaterialColors.primary[500]} />
         <Text style={styles.loadingText}>Loading analytics...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         refreshControl={
@@ -238,254 +288,134 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Analytics Dashboard</Text>
-          <Text style={styles.headerSubtitle}>Performance insights and metrics</Text>
+          <Text style={styles.headerSubtitle}>Business performance insights</Text>
         </View>
 
         {/* Timeframe Selector */}
-        {renderTimeframeTabs()}
+        {renderTimeframeSelector()}
 
-        {/* Key Metrics */}
-        {dashboardStats && (
-          <View style={styles.statsSection}>
-            <Text style={styles.sectionTitle}>Key Metrics</Text>
-            <View style={styles.statsGrid}>
-              {renderStatsCard('Total Leads', dashboardStats.totalLeads, 'All time', '#2196F3')}
-              {renderStatsCard('New Leads', dashboardStats.newLeads, 'This period', '#4CAF50')}
-              {renderStatsCard('Active Tasks', dashboardStats.activeTasks, 'Pending', '#FF9800')}
-              {renderStatsCard('Completed Tasks', dashboardStats.completedTasks, 'This period', '#9C27B0')}
-              {renderStatsCard('Monthly Leads', dashboardStats.leadsThisMonth, 'This month', '#607D8B')}
-              {renderStatsCard(
-                'Conversion Rate',
-                `${dashboardStats.conversionRate.toFixed(1)}%`,
-                'Lead to client',
-                dashboardStats.conversionRate > 15 ? '#4CAF50' : dashboardStats.conversionRate > 10 ? '#FF9800' : '#f44336'
-              )}
-            </View>
-          </View>
-        )}
+        {/* KPI Cards */}
+        {renderKPIcards()}
 
-        {/* Lead Distribution Charts */}
-        {leadStats && (
-          <>
-            {renderConversionFunnel()}
-            
-            {renderListCard('Leads by Source', leadStats.leadsBySource, 'source', 'count')}
-            
-            {renderListCard('Leads by Priority', leadStats.leadsByPriority, 'priority', 'count')}
-          </>
-        )}
-
-        {/* Recent Activity */}
-        {renderRecentActivity()}
+        {/* Charts Section */}
+        <View style={styles.chartsSection}>
+          {renderLeadStatusChart()}
+          {renderLeadSourceChart()}
+          {renderConversionFunnel()}
+        </View>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: MaterialColors.neutral[50],
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: MaterialColors.neutral[50],
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    marginTop: MaterialSpacing.md,
+    ...MaterialTypography.bodyLarge,
+    color: MaterialColors.neutral[600],
   },
   scrollContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.lg,
   },
   header: {
-    marginBottom: 24,
+    marginBottom: MaterialSpacing.xl,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    ...MaterialTypography.headlineMedium,
+    color: MaterialColors.neutral[900],
+    marginBottom: MaterialSpacing.xs,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: '#666',
+    ...MaterialTypography.bodyLarge,
+    color: MaterialColors.neutral[600],
   },
-  timeframeTabs: {
+  timeframeContainer: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: MaterialColors.surface,
     borderRadius: 12,
-    padding: 4,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    padding: MaterialSpacing.xs,
+    marginBottom: MaterialSpacing.xl,
+    ...MaterialElevation.level1,
   },
-  timeframeTab: {
+  timeframeButton: {
     flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
+    paddingVertical: MaterialSpacing.sm,
+    paddingHorizontal: MaterialSpacing.md,
     borderRadius: 8,
+    alignItems: 'center',
   },
-  activeTimeframeTab: {
-    backgroundColor: '#2196F3',
+  timeframeButtonActive: {
+    backgroundColor: MaterialColors.primary[500],
   },
-  timeframeTabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
+  timeframeButtonText: {
+    ...MaterialTypography.labelMedium,
+    color: MaterialColors.neutral[600],
   },
-  activeTimeframeTabText: {
-    color: '#fff',
+  timeframeButtonTextActive: {
+    color: MaterialColors.onPrimary,
   },
-  statsSection: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
-  },
-  statsGrid: {
+  kpiContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    marginBottom: MaterialSpacing.xl,
   },
-  statsCard: {
-    backgroundColor: '#fff',
-    padding: 16,
+  chartsSection: {
+    marginBottom: MaterialSpacing.xl,
+  },
+  card: {
+    backgroundColor: MaterialColors.surface,
     borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    padding: MaterialSpacing.lg,
+    marginBottom: MaterialSpacing.md,
+    ...MaterialElevation.level1,
   },
-  statsCardTitle: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 8,
-    fontWeight: '500',
-  },
-  statsCardValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
-  },
-  statsCardSubtitle: {
-    fontSize: 10,
-    color: '#999',
-  },
-  listCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  listCardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
-  },
-  listContent: {
-    gap: 12,
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  listItemLeft: {
-    flex: 1,
-    marginRight: 12,
-  },
-  listItemLabel: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  listItemValue: {
-    fontSize: 12,
-    color: '#666',
-  },
-  progressBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 80,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: '#2196F3',
-    borderRadius: 3,
-    minWidth: 4,
-  },
-  percentageText: {
-    fontSize: 10,
-    color: '#666',
-    marginLeft: 8,
-    width: 30,
-    textAlign: 'right',
+  cardTitle: {
+    ...MaterialTypography.titleLarge,
+    color: MaterialColors.neutral[900],
+    marginBottom: MaterialSpacing.md,
   },
   funnelCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    marginTop: MaterialSpacing.md,
   },
-  funnelCardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
-  },
-  funnelContent: {
-    gap: 12,
+  funnelContainer: {
+    marginTop: MaterialSpacing.md,
   },
   funnelStage: {
-    marginBottom: 8,
+    marginBottom: MaterialSpacing.lg,
   },
   funnelStageInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: MaterialSpacing.sm,
   },
   funnelStageLabel: {
-    fontSize: 14,
-    color: '#333',
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[800],
     fontWeight: '500',
   },
   funnelStageValue: {
-    fontSize: 14,
-    color: '#666',
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
     fontWeight: '600',
   },
   funnelBarContainer: {
     height: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: MaterialColors.neutral[200],
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -493,62 +423,8 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 4,
   },
-  activityCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  activityCardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
-  },
-  activityList: {
-    gap: 12,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  activityIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f8f9fa',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  activityIconText: {
-    fontSize: 16,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityType: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 2,
-  },
-  activityDescription: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 2,
-  },
-  activityTime: {
-    fontSize: 10,
-    color: '#999',
-  },
   bottomSpacer: {
-    height: 32,
+    height: 100,
   },
 });
 

@@ -21,11 +21,23 @@ import ProfileScreen from '../screens/profile/ProfileScreen';
 import LoadingScreen from '../screens/LoadingScreen';
 
 // Navigation types
-import { AuthStackParamList, MainTabParamList, LeadsStackParamList } from '../types';
+import { 
+  AuthStackParamList, 
+  MainTabParamList, 
+  LeadsStackParamList,
+  TasksStackParamList,
+  ProfileStackParamList,
+  CalendarStackParamList,
+  SearchStackParamList
+} from '../types';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const LeadsStack = createNativeStackNavigator<LeadsStackParamList>();
+const TasksStack = createNativeStackNavigator<TasksStackParamList>();
+const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
+const CalendarStack = createNativeStackNavigator<CalendarStackParamList>();
+const SearchStack = createNativeStackNavigator<SearchStackParamList>();
 
 // Leads stack navigator
 const LeadsStackNavigator = () => (

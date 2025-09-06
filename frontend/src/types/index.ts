@@ -164,6 +164,8 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Leads: undefined;
   Tasks: undefined;
+  Calendar: undefined;
+  Search: undefined;
   Profile: undefined;
 };
 
@@ -172,6 +174,41 @@ export type LeadsStackParamList = {
   LeadDetail: { leadId: number };
   AddLead: undefined;
   EditLead: { leadId: number };
+  ImportLeads: undefined;
+  ExportLeads: undefined;
+};
+
+export type TasksStackParamList = {
+  TasksList: undefined;
+  TaskDetail: { taskId: number };
+  AddTask: undefined;
+};
+
+export type ProfileStackParamList = {
+  Profile: undefined;
+  Settings: undefined;
+  ProfileSettings: undefined;
+  OfflineSettings: undefined;
+};
+
+export type CalendarStackParamList = {
+  Calendar: undefined;
+};
+
+export type SearchStackParamList = {
+  Search: undefined;
+};
+
+export type NotificationsStackParamList = {
+  Notifications: undefined;
+};
+
+export type AnalyticsStackParamList = {
+  Analytics: undefined;
+};
+
+export type InteractionsStackParamList = {
+  Interactions: undefined;
 };
 
 // Filter and Sort Types

@@ -181,3 +181,11 @@ n8n-data/
 # Backup files
 *.bak
 *.backup
+
+dev-debug.log
+.vscode
+# OS specific
+
+# Task files
+# tasks.json
+# tasks/ 

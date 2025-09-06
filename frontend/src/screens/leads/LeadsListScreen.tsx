@@ -1,4 +1,4 @@
-// Leads list screen with filtering and search
+// Leads list screen with Material Design BMAD principles
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -10,11 +10,21 @@ import {
   TextInput,
   Alert,
   RefreshControl,
+  SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 
 import { Lead, LeadListParams, LeadStatus, LeadPriority } from '../../types';
 import { apiService } from '../../services/api';
 import { formatCurrency } from '../../utils/validation';
+import MaterialLeadCard from '../../components/MaterialLeadCard';
+import MaterialFAB from '../../components/MaterialFAB';
+import { 
+  MaterialColors, 
+  MaterialElevation, 
+  MaterialSpacing, 
+  MaterialTypography 
+} from '../../styles/MaterialDesign';
 
 interface LeadsListScreenProps {
   navigation: any;
@@ -90,73 +100,18 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
     navigation.navigate('AddLead');
   };
 
-  const getStatusColor = (status: LeadStatus): string => {
-    switch (status) {
-      case 'New': return '#4CAF50';
-      case 'Contacted': return '#FF9800';
-      case 'Qualified': return '#2196F3';
-      case 'Showing Scheduled': return '#9C27B0';
-      case 'Offer Made': return '#FF5722';
-      case 'Closed Won': return '#4CAF50';
-      case 'Closed Lost': return '#F44336';
-      case 'Archived': return '#999';
-      default: return '#999';
-    }
-  };
-
-  const getPriorityColor = (priority: LeadPriority): string => {
-    switch (priority) {
-      case 'High': return '#F44336';
-      case 'Medium': return '#FF9800';
-      case 'Low': return '#4CAF50';
-      default: return '#999';
-    }
+  const clearFilters = () => {
+    setSelectedStatus(undefined);
+    setSelectedPriority(undefined);
+    setSearchTerm('');
   };
 
   const renderLeadItem = ({ item }: { item: Lead }) => (
-    <TouchableOpacity style={styles.leadCard} onPress={() => navigateToDetail(item.leadId)}>
-      <View style={styles.leadHeader}>
-        <Text style={styles.leadName}>
-          {item.firstName} {item.lastName}
-        </Text>
-        <View style={styles.badges}>
-          <Text style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
-            {item.priority}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.leadEmail}>{item.email}</Text>
-      
-      {item.phoneNumber && (
-        <Text style={styles.leadPhone}>{item.phoneNumber}</Text>
-      )}
-
-      {(item.budgetMin || item.budgetMax) && (
-        <Text style={styles.leadBudget}>
-          Budget: {formatCurrency(item.budgetMin || 0)} - {formatCurrency(item.budgetMax || 0)}
-        </Text>
-      )}
-
-      {item.desiredLocation && (
-        <Text style={styles.leadLocation}>📍 {item.desiredLocation}</Text>
-      )}
-
-      {item.aiSummary && (
-        <Text style={styles.aiSummary} numberOfLines={2}>
-          🤖 {item.aiSummary}
-        </Text>
-      )}
-
-      <View style={styles.leadFooter}>
-        <Text style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          {item.status}
-        </Text>
-        <Text style={styles.createdDate}>
-          {new Date(item.createdAt).toLocaleDateString()}
-        </Text>
-      </View>
-    </TouchableOpacity>
+    <MaterialLeadCard
+      lead={item}
+      onPress={() => navigateToDetail(item.leadId)}
+      elevation={1}
+    />
   );
 
   const renderEmptyState = () => (
@@ -173,42 +128,103 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
     </View>
   );
 
-  return (
-    <View style={styles.container}>
-      {/* Search and Filter Bar */}
-      <View style={styles.searchBar}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder=\"Search leads...\"
-          value={searchTerm}
-          onChangeText={setSearchTerm}
-          autoCapitalize=\"none\"
-          autoCorrect={false}
-        />
-      </View>
+  const renderSearchBar = () => (
+    <View style={styles.searchContainer}>
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search leads by name, email, or location..."
+        placeholderTextColor={MaterialColors.neutral[500]}
+        value={searchTerm}
+        onChangeText={setSearchTerm}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+    </View>
+  );
 
-      {/* Filter Pills */}
+  const renderFilterChips = () => {
+    const statusOptions: LeadStatus[] = ['New', 'Contacted', 'Qualified', 'Showing Scheduled', 'Offer Made', 'Closed Won'];
+    const priorityOptions: LeadPriority[] = ['High', 'Medium', 'Low'];
+
+    return (
       <View style={styles.filterContainer}>
-        <Text style={styles.filterLabel}>Filters:</Text>
-        {/* Status Filter */}
-        <TouchableOpacity
-          style={[styles.filterPill, selectedStatus && styles.filterPillActive]}
-          onPress={() => setSelectedStatus(selectedStatus ? undefined : 'New')}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScroll}
         >
-          <Text style={[styles.filterPillText, selectedStatus && styles.filterPillTextActive]}>
-            {selectedStatus || 'Status'}
-          </Text>
-        </TouchableOpacity>
-        {/* Priority Filter */}
-        <TouchableOpacity
-          style={[styles.filterPill, selectedPriority && styles.filterPillActive]}
-          onPress={() => setSelectedPriority(selectedPriority ? undefined : 'High')}
-        >
-          <Text style={[styles.filterPillText, selectedPriority && styles.filterPillTextActive]}>
-            {selectedPriority || 'Priority'}
-          </Text>
-        </TouchableOpacity>
+          {/* Status Chips */}
+          {statusOptions.map(status => (
+            <TouchableOpacity
+              key={status}
+              style={[
+                styles.filterChip,
+                selectedStatus === status && styles.filterChipActive,
+                { backgroundColor: selectedStatus === status ? MaterialColors.primary[500] : MaterialColors.neutral[100] }
+              ]}
+              onPress={() => setSelectedStatus(selectedStatus === status ? undefined : status)}
+            >
+              <Text style={[
+                styles.filterChipText,
+                selectedStatus === status && styles.filterChipTextActive
+              ]}>
+                {status}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          
+          {/* Priority Chips */}
+          {priorityOptions.map(priority => (
+            <TouchableOpacity
+              key={priority}
+              style={[
+                styles.filterChip,
+                selectedPriority === priority && styles.filterChipActive,
+                { backgroundColor: selectedPriority === priority ? MaterialColors.secondary[500] : MaterialColors.neutral[100] }
+              ]}
+              onPress={() => setSelectedPriority(selectedPriority === priority ? undefined : priority)}
+            >
+              <Text style={[
+                styles.filterChipText,
+                selectedPriority === priority && styles.filterChipTextActive
+              ]}>
+                {priority}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          
+          {/* Clear Filters Button */}
+          {(selectedStatus || selectedPriority || searchTerm) && (
+            <TouchableOpacity
+              style={[styles.clearButton, { backgroundColor: MaterialColors.error[100] }]}
+              onPress={clearFilters}
+            >
+              <Text style={[styles.clearButtonText, { color: MaterialColors.error[700] }]}>
+                Clear Filters
+              </Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
       </View>
+    );
+  };
+
+  if (isLoading && leads.length === 0) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={MaterialColors.primary[500]} />
+        <Text style={styles.loadingText}>Loading leads...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Search Bar */}
+      {renderSearchBar()}
+      
+      {/* Filter Chips */}
+      {renderFilterChips()}
 
       {/* Leads List */}
       <FlatList
@@ -223,198 +239,118 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Floating Add Button */}
-      <TouchableOpacity style={styles.fab} onPress={navigateToAddLead}>
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
-    </View>
+      {/* Material Design FAB */}
+      <MaterialFAB
+        icon="+"
+        onPress={navigateToAddLead}
+        color={MaterialColors.secondary[500]}
+        size="medium"
+        position="bottom-right"
+        visible={true}
+      />
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: MaterialColors.neutral[50],
   },
-  searchBar: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: MaterialColors.neutral[50],
+  },
+  loadingText: {
+    marginTop: MaterialSpacing.md,
+    ...MaterialTypography.bodyLarge,
+    color: MaterialColors.neutral[600],
+  },
+  searchContainer: {
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.md,
+    backgroundColor: MaterialColors.surface,
+    ...MaterialElevation.level1,
   },
   searchInput: {
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    backgroundColor: '#f9f9f9',
+    ...MaterialTypography.bodyLarge,
+    backgroundColor: MaterialColors.neutral[100],
+    borderRadius: 12,
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.sm,
+    color: MaterialColors.neutral[900],
   },
   filterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.sm,
+    backgroundColor: MaterialColors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: MaterialColors.neutral[200],
   },
-  filterLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginRight: 8,
+  filterScroll: {
+    paddingVertical: MaterialSpacing.xs,
   },
-  filterPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  filterChip: {
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.sm,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginRight: 8,
-    backgroundColor: '#fff',
+    marginRight: MaterialSpacing.sm,
+    backgroundColor: MaterialColors.neutral[100],
   },
-  filterPillActive: {
-    backgroundColor: '#2196F3',
-    borderColor: '#2196F3',
+  filterChipActive: {
+    backgroundColor: MaterialColors.primary[500],
   },
-  filterPillText: {
-    fontSize: 12,
-    color: '#666',
+  filterChipText: {
+    ...MaterialTypography.labelMedium,
+    color: MaterialColors.neutral[700],
   },
-  filterPillTextActive: {
-    color: '#fff',
+  filterChipTextActive: {
+    color: MaterialColors.onPrimary,
+  },
+  clearButton: {
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.sm,
+    borderRadius: 16,
+    marginLeft: MaterialSpacing.sm,
+  },
+  clearButtonText: {
+    ...MaterialTypography.labelMedium,
+    fontWeight: '600',
   },
   listContainer: {
-    padding: 16,
-  },
-  leadCard: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  leadHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  leadName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    flex: 1,
-  },
-  badges: {
-    flexDirection: 'row',
-  },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '500',
-  },
-  leadEmail: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  leadPhone: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  leadBudget: {
-    fontSize: 14,
-    color: '#4CAF50',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  leadLocation: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  aiSummary: {
-    fontSize: 13,
-    color: '#666',
-    fontStyle: 'italic',
-    marginBottom: 8,
-    lineHeight: 18,
-  },
-  leadFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '500',
-  },
-  createdDate: {
-    fontSize: 12,
-    color: '#999',
+    paddingVertical: MaterialSpacing.sm,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 64,
-  },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
     paddingHorizontal: 32,
   },
+  emptyStateTitle: {
+    ...MaterialTypography.headlineSmall,
+    color: MaterialColors.neutral[800],
+    marginBottom: MaterialSpacing.sm,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
+    textAlign: 'center',
+    marginBottom: MaterialSpacing.xl,
+  },
   addButton: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: MaterialColors.secondary[500],
+    paddingHorizontal: MaterialSpacing.xl,
+    paddingVertical: MaterialSpacing.md,
+    borderRadius: 12,
+    ...MaterialElevation.level2,
   },
   addButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    ...MaterialTypography.labelLarge,
+    color: MaterialColors.onSecondary,
     fontWeight: '600',
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#2196F3',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
-  },
-  fabText: {
-    fontSize: 24,
-    color: '#fff',
-    fontWeight: '300',
   },
 });
 
