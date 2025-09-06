@@ -33,9 +33,11 @@ const searchRoutes = require('./routes/search');
 const notificationRoutes = require('./routes/notifications');
 const fileRoutes = require('./routes/files');
 const profileRoutes = require('./routes/profile');
+const migrationRoutes = require('./routes/migrations');
 
 // Import job queues
 const { setupJobQueues } = require('./jobs/setup');
+const migrationManager = require('./migrations');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -112,6 +114,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/migrations', migrationRoutes);
 
 // Remove duplicate webhook routes - use API endpoints only
 // Frontend should connect to /api/* endpoints, not webhook routes
@@ -140,6 +143,10 @@ async function startServer() {
     // Connect to database
     await connectDatabase();
     logger.info('Database connected successfully');
+
+    // Run database migrations
+    await migrationManager.initialize();
+    logger.info('Database migrations completed successfully');
 
     // Connect to Redis
     await connectRedis();

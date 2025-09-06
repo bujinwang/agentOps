@@ -10,7 +10,12 @@
     "test:watch": "jest --watch",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "docs": "swagger-jsdoc -d swaggerDef.js src/routes/*.js -o swagger.json"
+    "docs": "swagger-jsdoc -d swaggerDef.js src/routes/*.js -o swagger.json",
+    "migrate": "node src/migrations/cli.js migrate",
+    "migrate:status": "node src/migrations/cli.js status",
+    "migrate:rollback": "node src/migrations/cli.js rollback",
+    "migrate:create": "node src/migrations/cli.js create",
+    "migrate:validate": "node src/migrations/cli.js validate"
   },
   "keywords": [
     "real-estate",
