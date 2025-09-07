@@ -15,6 +15,7 @@ import {
   MaterialTypography,
   MaterialShape 
 } from '../styles/MaterialDesign';
+import { ActionIcon, StatusIcon } from './MaterialIcon';
 
 interface MaterialDatePickerProps {
   label: string;
@@ -297,3 +298,16 @@ const styles = StyleSheet.create({
 });
 
 export default MaterialDatePicker;
+
+<StatusIcon
+  name="error"
+  size={16}
+  color={MaterialColors.error[500]}
+  state="error"
+/>
+<ActionIcon
+  name="expand_more"
+  size={20}
+  color={getLabelColor()}
+  state={disabled ? 'disabled' : 'default'}
+/>

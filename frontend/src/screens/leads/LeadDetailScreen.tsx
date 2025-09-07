@@ -51,7 +51,7 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
   const handleStatusChange = (newStatus: LeadStatus) => {
     Alert.alert(
       'Update Status',
-      `Change lead status to \"${newStatus}\"?`,
+      `Change lead status to "${newStatus}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -116,7 +116,7 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size=\"large\" color=\"#2196F3\" />
+        <ActivityIndicator size="large" color="#2196F3" />
         <Text style={styles.loadingText}>Loading lead details...</Text>
       </View>
     );

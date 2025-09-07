@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-netinfo/lib/commonjs';
+import NetInfo from '@react-native-community/netinfo';
 import { Lead, Task, Interaction } from '../types';
 
 interface OfflineAction {
@@ -383,7 +383,7 @@ class OfflineStorageService {
     const optimisticTask: Task = {
       ...taskData,
       taskId: parseInt(this.generateOptimisticId()),
-      completed: false,
+      isCompleted: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -394,4 +394,15 @@ class OfflineStorageService {
 }
 
 export const offlineStorage = new OfflineStorageService();
+
+// Initialize offline storage service
+export const initializeOfflineStorage = async (): Promise<void> => {
+  try {
+    // Initialize network listener and any other setup
+    console.log('Offline storage initialized');
+  } catch (error) {
+    console.error('Failed to initialize offline storage:', error);
+  }
+};
+
 export default offlineStorage;

@@ -14,6 +14,7 @@ import {
   MaterialTypography,
   MaterialShape 
 } from '../styles/MaterialDesign';
+import { ActionIcon } from './MaterialIcon';
 
 interface MaterialTextFieldProps {
   label: string;
@@ -144,7 +145,12 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
         {/* Left Icon */}
         {leftIcon && (
           <View style={styles.leftIconContainer}>
-            <Text style={[styles.leftIcon, { color: getLabelColor() }]}>{leftIcon}</Text>
+            <ActionIcon
+              name={leftIcon}
+              size={20}
+              color={getLabelColor()}
+              state={error ? 'error' : disabled ? 'disabled' : 'default'}
+            />
           </View>
         )}
 
@@ -195,7 +201,13 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
             onPress={onRightIconPress}
             disabled={!onRightIconPress}
           >
-            <Text style={[styles.rightIcon, { color: getLabelColor() }]}>{rightIcon}</Text>
+            <ActionIcon
+              name={rightIcon}
+              size={20}
+              color={getLabelColor()}
+              state={error ? 'error' : disabled ? 'disabled' : onRightIconPress ? 'active' : 'default'}
+              onPress={onRightIconPress}
+            />
           </TouchableOpacity>
         )}
       </View>

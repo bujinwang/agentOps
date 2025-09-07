@@ -131,8 +131,8 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
                 style={[styles.input, hasError(errors, 'firstName') && styles.inputError]}
                 value={formData.firstName}
                 onChangeText={(value) => handleInputChange('firstName', value)}
-                placeholder=\"First name\"
-                autoCapitalize=\"words\"
+                placeholder="First name"
+                autoCapitalize="words"
                 editable={!isSubmitting}
               />
               {hasError(errors, 'firstName') && (
@@ -148,8 +148,8 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
                 style={[styles.input, hasError(errors, 'lastName') && styles.inputError]}
                 value={formData.lastName}
                 onChangeText={(value) => handleInputChange('lastName', value)}
-                placeholder=\"Last name\"
-                autoCapitalize=\"words\"
+                placeholder="Last name"
+                autoCapitalize="words"
                 editable={!isSubmitting}
               />
               {hasError(errors, 'lastName') && (
@@ -166,9 +166,9 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
               style={[styles.input, hasError(errors, 'email') && styles.inputError]}
               value={formData.email}
               onChangeText={(value) => handleInputChange('email', value)}
-              placeholder=\"email@example.com\"
-              keyboardType=\"email-address\"
-              autoCapitalize=\"none\"
+              placeholder="email@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
               autoCorrect={false}
               editable={!isSubmitting}
             />
@@ -185,8 +185,8 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
               style={[styles.input, hasError(errors, 'phoneNumber') && styles.inputError]}
               value={formData.phoneNumber}
               onChangeText={(value) => handleInputChange('phoneNumber', value)}
-              placeholder=\"(555) 123-4567\"
-              keyboardType=\"phone-pad\"
+              placeholder="(555) 123-4567"
+              keyboardType="phone-pad"
               editable={!isSubmitting}
             />
             {hasError(errors, 'phoneNumber') && (
@@ -224,8 +224,8 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
                 style={[styles.input, hasError(errors, 'budgetMin') && styles.inputError]}
                 value={formatCurrencyDisplay(formData.budgetMin || '')}
                 onChangeText={(value) => handleCurrencyChange('budgetMin', value)}
-                placeholder=\"500,000\"
-                keyboardType=\"numeric\"
+                placeholder="500,000"
+                keyboardType="numeric"
                 editable={!isSubmitting}
               />
               {hasError(errors, 'budgetMin') && (
@@ -241,8 +241,8 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
                 style={[styles.input, hasError(errors, 'budgetMax') && styles.inputError]}
                 value={formatCurrencyDisplay(formData.budgetMax || '')}
                 onChangeText={(value) => handleCurrencyChange('budgetMax', value)}
-                placeholder=\"750,000\"
-                keyboardType=\"numeric\"
+                placeholder="750,000"
+                keyboardType="numeric"
                 editable={!isSubmitting}
               />
               {hasError(errors, 'budgetMax') && (
@@ -259,8 +259,8 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
               style={styles.input}
               value={formData.desiredLocation}
               onChangeText={(value) => handleInputChange('desiredLocation', value)}
-              placeholder=\"Downtown Toronto, Mississauga, etc.\"
-              autoCapitalize=\"words\"
+              placeholder="Downtown Toronto, Mississauga, etc."
+              autoCapitalize="words"
               editable={!isSubmitting}
             />
           </View>
@@ -274,7 +274,7 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
                 enabled={!isSubmitting}
                 style={styles.picker}
               >
-                <Picker.Item label=\"Select property type\" value={undefined} />
+                <Picker.Item label="Select property type" value={undefined} />
                 {propertyTypes.map((type) => (
                   <Picker.Item key={type} label={type} value={type} />
                 ))}
@@ -289,8 +289,8 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
                 style={[styles.input, hasError(errors, 'bedroomsMin') && styles.inputError]}
                 value={formData.bedroomsMin}
                 onChangeText={(value) => handleInputChange('bedroomsMin', value)}
-                placeholder=\"2\"
-                keyboardType=\"numeric\"
+                placeholder="2"
+                keyboardType="numeric"
                 editable={!isSubmitting}
               />
               {hasError(errors, 'bedroomsMin') && (
@@ -306,8 +306,8 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
                 style={[styles.input, hasError(errors, 'bathroomsMin') && styles.inputError]}
                 value={formData.bathroomsMin}
                 onChangeText={(value) => handleInputChange('bathroomsMin', value)}
-                placeholder=\"2.5\"
-                keyboardType=\"numeric\"
+                placeholder="2.5"
+                keyboardType="numeric"
                 editable={!isSubmitting}
               />
               {hasError(errors, 'bathroomsMin') && (
@@ -329,10 +329,10 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
               style={[styles.input, styles.textArea]}
               value={formData.notes}
               onChangeText={(value) => handleInputChange('notes', value)}
-              placeholder=\"Any additional notes about this lead...\"
+              placeholder="Any additional notes about this lead..."
               multiline
               numberOfLines={4}
-              textAlignVertical=\"top\"
+              textAlignVertical="top"
               editable={!isSubmitting}
             />
           </View>

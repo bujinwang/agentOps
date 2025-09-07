@@ -1,3 +1,4 @@
+
 import { StyleSheet, Dimensions, Platform } from 'react-native';
 
 // Material Design Color System
@@ -81,168 +82,76 @@ export const MaterialColors = {
   onError: '#FFFFFF',
 };
 
-// Material Design Typography
-export const MaterialTypography = {
-  // Display
-  displayLarge: {
-    fontSize: 57,
-    lineHeight: 64,
-    letterSpacing: -0.25,
-    fontFamily: 'Roboto-Regular',
+// Material Design Spacing System
+export const MaterialSpacing = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 48,
+  xxxl: 64,
+  // Component specific spacing
+  component: {
+    padding: 16,
+    margin: 8,
+    gap: 12,
   },
-  displayMedium: {
-    fontSize: 45,
-    lineHeight: 52,
-    letterSpacing: 0,
-    fontFamily: 'Roboto-Regular',
-  },
-  displaySmall: {
-    fontSize: 36,
-    lineHeight: 44,
-    letterSpacing: 0,
-    fontFamily: 'Roboto-Regular',
-  },
-  
-  // Headline
-  headlineLarge: {
-    fontSize: 32,
-    lineHeight: 40,
-    letterSpacing: 0,
-    fontFamily: 'Roboto-Regular',
-  },
-  headlineMedium: {
-    fontSize: 28,
-    lineHeight: 36,
-    letterSpacing: 0,
-    fontFamily: 'Roboto-Regular',
-  },
-  headlineSmall: {
-    fontSize: 24,
-    lineHeight: 32,
-    letterSpacing: 0,
-    fontFamily: 'Roboto-Regular',
-  },
-  
-  // Title
-  titleLarge: {
-    fontSize: 22,
-    lineHeight: 28,
-    letterSpacing: 0,
-    fontFamily: 'Roboto-Regular',
-  },
-  titleMedium: {
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: 0.15,
-    fontFamily: 'Roboto-Medium',
-  },
-  titleSmall: {
-    fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 0.1,
-    fontFamily: 'Roboto-Medium',
-  },
-  
-  // Body
-  bodyLarge: {
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: 0.5,
-    fontFamily: 'Roboto-Regular',
-  },
-  bodyMedium: {
-    fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 0.25,
-    fontFamily: 'Roboto-Regular',
-  },
-  bodySmall: {
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0.4,
-    fontFamily: 'Roboto-Regular',
-  },
-  
-  // Label
-  labelLarge: {
-    fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 0.1,
-    fontFamily: 'Roboto-Medium',
-  },
-  labelMedium: {
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontFamily: 'Roboto-Medium',
-  },
-  labelSmall: {
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontFamily: 'Roboto-Medium',
+  // Layout spacing
+  layout: {
+    section: 24,
+    container: 16,
+    screen: 20,
   },
 };
 
-// Material Design Elevation (Shadows)
+// Material Design Elevation System
 export const MaterialElevation = {
   level0: {
-    shadowColor: '#000',
+    elevation: 0,
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0,
     shadowRadius: 0,
-    elevation: 0,
   },
   level1: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
     elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
   },
   level2: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
     elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.14,
+    shadowRadius: 4,
   },
   level3: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
     elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
   },
   level4: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
     elevation: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
   },
   level5: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 6,
+    elevation: 5,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.20,
+    shadowRadius: 12,
   },
 };
 
-// Material Design Spacing (8dp grid system)
-export const MaterialSpacing = {
-  none: 0,
-  xs: 4,    // 0.5 * 8
-  sm: 8,    // 1 * 8
-  md: 16,   // 2 * 8
-  lg: 24,   // 3 * 8
-  xl: 32,   // 4 * 8
-  xxl: 48,  // 6 * 8
-  xxxl: 64, // 8 * 8
-};
-
-// Material Design Shape (Border Radius)
+// Material Design Shape System
 export const MaterialShape = {
   none: 0,
   extraSmall: 4,
@@ -251,176 +160,383 @@ export const MaterialShape = {
   large: 16,
   extraLarge: 28,
   full: 9999,
+  // Component specific shapes
+  button: 20,
+  card: 12,
+  fab: 16,
+  bottomSheet: 28,
+};
+
+// Material Design Icon System
+export const MaterialIcons = {
+  // Navigation Icons
+  navigation: {
+    home: 'home',
+    leads: 'people',
+    tasks: 'assignment',
+    profile: 'person',
+    settings: 'settings',
+    back: 'arrow-back',
+    menu: 'menu',
+    close: 'close',
+    search: 'search',
+  },
+  
+  // Action Icons
+  actions: {
+    add: 'add',
+    edit: 'edit',
+    delete: 'delete',
+    save: 'save',
+    cancel: 'cancel',
+    done: 'done',
+    favorite: 'favorite',
+    share: 'share',
+    call: 'call',
+    email: 'email',
+    message: 'message',
+  },
+  
+  // Status Icons
+  status: {
+    success: 'check-circle',
+    error: 'error',
+    warning: 'warning',
+    info: 'info',
+    pending: 'schedule',
+    active: 'radio-button-checked',
+    inactive: 'radio-button-unchecked',
+  },
+  
+  // Real Estate Specific Icons
+  realEstate: {
+    property: 'home',
+    location: 'location-on',
+    price: 'attach-money',
+    area: 'square-foot',
+    bedrooms: 'bed',
+    bathrooms: 'bathtub',
+    garage: 'garage',
+    garden: 'grass',
+    pool: 'pool',
+    security: 'security',
+  },
+  
+  // Business Icons
+  business: {
+    client: 'person',
+    meeting: 'event',
+    document: 'description',
+    contract: 'assignment',
+    calendar: 'calendar-today',
+    notification: 'notifications',
+    analytics: 'analytics',
+    report: 'assessment',
+  },
+};
+
+// Icon Sizes
+export const MaterialIconSizes = {
+  xs: 16,
+  sm: 20,
+  md: 24,
+  lg: 32,
+  xl: 40,
+  xxl: 48,
+  // Component specific sizes
+  navigation: 24,
+  fab: 24,
+  button: 20,
+  appBar: 24,
+  list: 24,
+};
+
+// Material Design Typography - Using System Fonts
+const systemFont = Platform.select({
+  ios: 'System',
+  android: 'sans-serif',
+  web: 'Arial, sans-serif',
+});
+
+export const MaterialTypography = {
+  // Display
+  displayLarge: {
+    fontSize: 57,
+    lineHeight: 64,
+    letterSpacing: -0.25,
+    fontFamily: systemFont,
+    fontWeight: '400' as any,
+  },
+  displayMedium: {
+    fontSize: 45,
+    lineHeight: 52,
+    letterSpacing: 0,
+    fontFamily: systemFont,
+    fontWeight: '400' as any,
+  },
+  displaySmall: {
+    fontSize: 36,
+    lineHeight: 44,
+    letterSpacing: 0,
+    fontFamily: systemFont,
+    fontWeight: '400' as any,
+  },
+  
+  // Headline
+  headlineLarge: {
+    fontSize: 32,
+    lineHeight: 40,
+    letterSpacing: 0,
+    fontFamily: systemFont,
+    fontWeight: '400' as any,
+  },
+  headlineMedium: {
+    fontSize: 28,
+    lineHeight: 36,
+    letterSpacing: 0,
+    fontFamily: systemFont,
+    fontWeight: '400' as any,
+  },
+  headlineSmall: {
+    fontSize: 24,
+    lineHeight: 32,
+    letterSpacing: 0,
+    fontFamily: systemFont,
+    fontWeight: '400' as any,
+  },
+  
+  // Title
+  titleLarge: {
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: 0,
+    fontFamily: systemFont,
+    fontWeight: '500' as any,
+  },
+  titleMedium: {
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 0.15,
+    fontFamily: systemFont,
+    fontWeight: '500' as any,
+  },
+  titleSmall: {
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    fontFamily: systemFont,
+    fontWeight: '500' as any,
+  },
+  
+  // Label
+  labelLarge: {
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    fontFamily: systemFont,
+    fontWeight: '500' as any,
+  },
+  labelMedium: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontFamily: systemFont,
+    fontWeight: '500' as any,
+  },
+  labelSmall: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontFamily: systemFont,
+    fontWeight: '500' as any,
+  },
+  
+  // Body
+  bodyLarge: {
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 0.15,
+    fontFamily: systemFont,
+    fontWeight: '400' as any,
+  },
+  bodyMedium: {
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.25,
+    fontFamily: systemFont,
+    fontWeight: '400' as any,
+  },
+  bodySmall: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.4,
+    fontFamily: systemFont,
+    fontWeight: '400' as any,
+  },
 };
 
 // Material Design Breakpoints
 export const MaterialBreakpoints = {
+  xs: 0,
+  sm: 600,
+  md: 960,
+  lg: 1280,
+  xl: 1920,
   mobile: 320,
   tablet: 768,
   desktop: 1024,
-  largeDesktop: 1440,
 };
 
 // Material Design Motion
 export const MaterialMotion = {
   duration: {
-    short1: 50,
-    short2: 100,
-    short3: 150,
-    short4: 200,
-    medium1: 250,
-    medium2: 300,
-    medium3: 350,
-    medium4: 400,
-    long1: 450,
-    long2: 500,
-    long3: 550,
-    long4: 600,
+    short1: 75,
+    short2: 150,
+    short3: 200,
+    short4: 250,
+    medium1: 300,
+    medium2: 350,
+    medium3: 400,
+    medium4: 450,
+    long1: 500,
+    long2: 550,
+    long3: 600,
+    long4: 650,
   },
   easing: {
-    standard: 'cubic-bezier(0.4, 0.0, 0.2, 1)',
-    decelerate: 'cubic-bezier(0.0, 0.0, 0.2, 1)',
-    accelerate: 'cubic-bezier(0.4, 0.0, 1, 1)',
     linear: 'linear',
+    standard: 'cubic-bezier(0.2, 0.0, 0, 1.0)',
+    decelerated: 'cubic-bezier(0.0, 0.0, 0.2, 1.0)',
+    accelerated: 'cubic-bezier(0.4, 0.0, 1, 1.0)',
   },
 };
 
-// Material Design Component Styles
-export const MaterialStyles = StyleSheet.create({
-  // App Bar
-  appBar: {
-    backgroundColor: MaterialColors.primary[500],
-    elevation: 4,
-    height: 56,
-    justifyContent: 'center',
-    paddingHorizontal: MaterialSpacing.md,
-  },
-  
-  // Cards
-  card: {
-    backgroundColor: MaterialColors.surface,
-    borderRadius: MaterialShape.medium,
-    elevation: 1,
-    marginHorizontal: MaterialSpacing.sm,
-    marginVertical: MaterialSpacing.xs,
-    padding: MaterialSpacing.md,
-  },
-  
-  // FAB (Floating Action Button)
-  fab: {
-    position: 'absolute',
-    right: MaterialSpacing.md,
-    bottom: MaterialSpacing.md,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: MaterialColors.secondary[500],
-    elevation: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  
-  // Chips
-  chip: {
-    backgroundColor: MaterialColors.neutral[100],
-    borderRadius: MaterialShape.full,
-    paddingHorizontal: MaterialSpacing.md,
-    paddingVertical: MaterialSpacing.xs,
-    marginRight: MaterialSpacing.sm,
-    marginBottom: MaterialSpacing.sm,
-  },
-  
-  // Text Fields
-  textField: {
-    backgroundColor: MaterialColors.surface,
-    borderRadius: MaterialShape.small,
-    borderWidth: 1,
-    borderColor: MaterialColors.neutral[300],
-    paddingHorizontal: MaterialSpacing.md,
-    paddingVertical: MaterialSpacing.sm,
-    fontSize: 16,
-    fontFamily: 'Roboto-Regular',
-  },
-  
-  // Buttons
-  button: {
-    borderRadius: MaterialShape.full,
-    paddingHorizontal: MaterialSpacing.lg,
-    paddingVertical: MaterialSpacing.sm,
-    elevation: 2,
-  },
-  buttonText: {
-    ...MaterialTypography.labelLarge,
-    textTransform: 'uppercase',
-  },
-  
-  // Progress Indicators
-  progressBar: {
-    height: 4,
-    backgroundColor: MaterialColors.primary[100],
-    borderRadius: MaterialShape.full,
-  },
-  progressIndicator: {
-    height: '100%',
-    backgroundColor: MaterialColors.primary[500],
-    borderRadius: MaterialShape.full,
-  },
-});
+// Screen Dimensions
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// Material Design Dark Theme
-export const MaterialDarkTheme = {
-  colors: {
-    primary: MaterialColors.primary[200],
-    secondary: MaterialColors.secondary[200],
-    background: '#121212',
-    surface: '#1E1E1E',
-    onSurface: '#FFFFFF',
-    onPrimary: '#000000',
-    onSecondary: '#000000',
-    onError: '#000000',
-    neutral: {
-      50: '#1E1E1E',
-      100: '#2C2C2C',
-      200: '#3A3A3A',
-      300: '#484848',
-      400: '#565656',
-      500: '#646464',
-      600: '#727272',
-      700: '#808080',
-      800: '#8E8E8E',
-      900: '#9C9C9C',
-    },
-  },
-  elevation: MaterialElevation,
-  typography: MaterialTypography,
-  spacing: MaterialSpacing,
-  shape: MaterialShape,
+export const MaterialScreen = {
+  width: screenWidth,
+  height: screenHeight,
+  isMobile: screenWidth < MaterialBreakpoints.tablet,
+  isTablet: screenWidth >= MaterialBreakpoints.tablet && screenWidth < MaterialBreakpoints.desktop,
+  isDesktop: screenWidth >= MaterialBreakpoints.desktop,
 };
 
-// Helper functions
-export const getElevationStyle = (level: number) => {
-  return MaterialElevation[`level${level}` as keyof typeof MaterialElevation] || MaterialElevation.level1;
+// Enhanced Icon Theme System
+export const MaterialIconThemes = {
+  light: {
+    default: MaterialColors.neutral[800],
+    active: MaterialColors.primary[600],
+    inactive: MaterialColors.neutral[400],
+    disabled: MaterialColors.neutral[300],
+    success: MaterialColors.secondary[600],
+    error: MaterialColors.error[500],
+    warning: MaterialColors.warning[600],
+    info: MaterialColors.primary[500],
+    surface: MaterialColors.neutral[600],
+    onSurface: MaterialColors.neutral[800],
+  },
+  dark: {
+    default: MaterialColors.neutral[100],
+    active: MaterialColors.primary[300],
+    inactive: MaterialColors.neutral[600],
+    disabled: MaterialColors.neutral[700],
+    success: MaterialColors.secondary[400],
+    error: MaterialColors.error[300],
+    warning: MaterialColors.warning[400],
+    info: MaterialColors.primary[300],
+    surface: MaterialColors.neutral[400],
+    onSurface: MaterialColors.neutral[100],
+  },
 };
 
-export const getSpacing = (size: keyof typeof MaterialSpacing) => {
-  return MaterialSpacing[size];
+// Icon State Variants
+export const MaterialIconStates = {
+  default: {
+    opacity: 1,
+    scale: 1,
+    rotation: 0,
+  },
+  active: {
+    opacity: 1,
+    scale: 1.1,
+    rotation: 0,
+  },
+  inactive: {
+    opacity: 0.6,
+    scale: 0.9,
+    rotation: 0,
+  },
+  disabled: {
+    opacity: 0.38,
+    scale: 1,
+    rotation: 0,
+  },
+  hover: {
+    opacity: 0.8,
+    scale: 1.05,
+    rotation: 0,
+  },
+  pressed: {
+    opacity: 0.7,
+    scale: 0.95,
+    rotation: 0,
+  },
+  loading: {
+    opacity: 0.6,
+    scale: 1,
+    rotation: 360,
+  },
 };
 
-export const getTypography = (variant: keyof typeof MaterialTypography) => {
-  return MaterialTypography[variant];
+// Icon Animation Presets
+export const MaterialIconAnimations = {
+  none: {
+    duration: 0,
+    easing: 'linear',
+  },
+  subtle: {
+    duration: MaterialMotion.duration.short2,
+    easing: MaterialMotion.easing.standard,
+  },
+  standard: {
+    duration: MaterialMotion.duration.short3,
+    easing: MaterialMotion.easing.standard,
+  },
+  emphasized: {
+    duration: MaterialMotion.duration.medium1,
+    easing: MaterialMotion.easing.decelerated,
+  },
+  bounce: {
+    duration: MaterialMotion.duration.medium2,
+    easing: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+  },
 };
 
-export default {
-  colors: MaterialColors,
-  typography: MaterialTypography,
-  elevation: MaterialElevation,
-  spacing: MaterialSpacing,
-  shape: MaterialShape,
-  breakpoints: MaterialBreakpoints,
-  motion: MaterialMotion,
-  styles: MaterialStyles,
-  darkTheme: MaterialDarkTheme,
-  getElevationStyle,
-  getSpacing,
-  getTypography,
+// Context-Aware Icon Variants
+export const MaterialIconContexts = {
+  navigation: {
+    defaultSize: MaterialIconSizes.navigation,
+    activeColor: MaterialColors.primary[600],
+    inactiveColor: MaterialColors.neutral[500],
+    states: ['default', 'active', 'inactive'],
+  },
+  action: {
+    defaultSize: MaterialIconSizes.button,
+    primaryColor: MaterialColors.primary[600],
+    secondaryColor: MaterialColors.neutral[600],
+    states: ['default', 'active', 'disabled', 'hover', 'pressed'],
+  },
+  status: {
+    defaultSize: MaterialIconSizes.sm,
+    successColor: MaterialColors.secondary[600],
+    errorColor: MaterialColors.error[500],
+    warningColor: MaterialColors.warning[600],
+    states: ['success', 'error', 'warning', 'info'],
+  },
+  decorative: {
+    defaultSize: MaterialIconSizes.md,
+    defaultColor: MaterialColors.neutral[400],
+    states: ['default', 'subtle'],
+  },
 };

@@ -7,17 +7,16 @@ import {
   Animated,
 } from 'react-native';
 import { MaterialColors, MaterialElevation, MaterialSpacing, MaterialTypography } from '../styles/MaterialDesign';
+import { BusinessIcon, StatusIcon } from './MaterialIcon';
 
 interface MaterialKPICardProps {
   title: string;
   value: string | number;
   subtitle?: string;
-  trend?: {
-    value: number;
-    isPositive: boolean;
-  };
-  icon?: string;
+  trend?: 'up' | 'down' | 'neutral';
+  trendValue?: string;
   color?: string;
+  icon?: string;
   onPress?: () => void;
   elevation?: number;
 }
@@ -56,8 +55,14 @@ const MaterialKPICard: React.FC<MaterialKPICardProps> = ({
   };
 
   const getTrendIcon = () => {
-    if (!trend) return '';
-    return trend.isPositive ? '↑' : '↓';
+    switch (trend) {
+      case 'up':
+        return 'trending_up';
+      case 'down':
+        return 'trending_down';
+      default:
+        return 'trending_flat';
+    }
   };
 
   const CardContent = () => (
@@ -67,7 +72,12 @@ const MaterialKPICard: React.FC<MaterialKPICardProps> = ({
           {title}
         </Text>
         {icon && (
-          <Text style={[styles.icon, { color: color }]}>{icon}</Text>
+          <BusinessIcon
+            name={icon}
+            size={24}
+            color={color}
+            style={styles.iconContainer}
+          />
         )}
       </View>
       
@@ -86,7 +96,12 @@ const MaterialKPICard: React.FC<MaterialKPICardProps> = ({
       {trend && (
         <View style={styles.trend}>
           <Text style={[styles.trendIcon, { color: getTrendColor() }]}>
-            {getTrendIcon()}
+            <StatusIcon
+              name={getTrendIcon()}
+              size={16}
+              color={getTrendColor()}
+              state={trend === 'up' ? 'success' : trend === 'down' ? 'error' : 'default'}
+            />
           </Text>
           <Text style={[styles.trendValue, { color: getTrendColor() }]}>
             {Math.abs(trend.value)}%

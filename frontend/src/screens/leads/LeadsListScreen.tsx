@@ -12,6 +12,7 @@ import {
   RefreshControl,
   SafeAreaView,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 
 import { Lead, LeadListParams, LeadStatus, LeadPriority } from '../../types';

@@ -12,6 +12,7 @@ import {
   MaterialSpacing, 
   MaterialTypography 
 } from '../styles/MaterialDesign';
+import { NavigationIcon } from './MaterialIcon';
 
 interface NavigationItem {
   key: string;
@@ -59,12 +60,16 @@ const MaterialBottomNavigation: React.FC<MaterialBottomNavigationProps> = ({
 
   const renderIcon = (item: NavigationItem, isActive: boolean) => {
     const iconColor = isActive ? activeColor : inactiveColor;
-    const iconSize = isActive ? 24 : 22;
+    const iconState = isActive ? 'active' : 'default';
     
     return (
-      <Text style={[styles.icon, { color: iconColor, fontSize: iconSize }]}>
-        {item.icon}
-      </Text>
+      <NavigationIcon
+        name={item.icon}
+        color={iconColor}
+        state={iconState}
+        size="navigation"
+        accessibilityLabel={`${item.title} tab`}
+      />
     );
   };
 
@@ -94,37 +99,38 @@ const MaterialBottomNavigation: React.FC<MaterialBottomNavigationProps> = ({
         onPressIn={() => handlePressIn(index)}
         onPressOut={() => handlePressOut(index)}
         activeOpacity={0.9}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: isActive }}
+        accessibilityLabel={`${item.title} tab${isActive ? ', selected' : ''}`}
       >
         <Animated.View
           style={[
             styles.itemContent,
-            {
-              transform: [{ scale: scaleValue }],
-            },
+            { transform: [{ scale: scaleValue }] },
           ]}
         >
           <View style={styles.iconContainer}>
             {renderIcon(item, isActive)}
             {renderBadge(item.badge)}
           </View>
-          
           {showLabels && (
-            <Text 
+            <Text
               style={[
                 styles.label,
-                {
-                  color: isActive ? activeColor : inactiveColor,
-                  fontWeight: isActive ? '600' : '400',
-                }
+                { color: isActive ? activeColor : inactiveColor },
               ]}
               numberOfLines={1}
             >
               {item.title}
             </Text>
           )}
-          
           {isActive && (
-            <View style={[styles.activeIndicator, { backgroundColor: activeColor }]} />
+            <View
+              style={[
+                styles.activeIndicator,
+                { backgroundColor: activeColor },
+              ]}
+            />
           )}
         </Animated.View>
       </TouchableOpacity>
@@ -174,13 +180,11 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginBottom: MaterialSpacing.xs,
   },
-  icon: {
-    textAlign: 'center',
-  },
   badgeContainer: {
     position: 'absolute',
     top: -4,
     right: -8,
+    zIndex: 1,
   },
   badge: {
     minWidth: 16,

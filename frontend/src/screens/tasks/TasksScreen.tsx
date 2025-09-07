@@ -13,7 +13,7 @@ import {
 
 import { Task, TaskPriority } from '../../types';
 import { apiService } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface TasksScreenProps {
   navigation: any;

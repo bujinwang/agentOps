@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 const ProfileScreen: React.FC = () => {
   const { user, logout, isLoading } = useAuth();

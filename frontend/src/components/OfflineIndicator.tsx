@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import { getRelativeTime } from '../utils/validation';
+import { StatusIcon } from './MaterialIcon';
 
 interface OfflineIndicatorProps {
   onPress?: () => void;
@@ -46,10 +47,16 @@ const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
   };
 
   const getStatusIcon = (): string => {
-    if (!status.isOnline) return '📴';
-    if (status.syncInProgress) return '🔄';
-    if (status.pendingActions > 0) return '⏳';
-    return '✅';
+    switch (status) {
+      case 'online':
+        return 'wifi';
+      case 'offline':
+        return 'wifi_off';
+      case 'connecting':
+        return 'sync';
+      default:
+        return 'signal_wifi_statusbar_null';
+    }
   };
 
   const getLastSyncText = (): string => {
@@ -77,7 +84,12 @@ const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
         onPress={handlePress}
         activeOpacity={0.7}
       >
-        <Text style={styles.icon}>{getStatusIcon()}</Text>
+        <StatusIcon
+          name={getStatusIcon()}
+          size={16}
+          color={MaterialColors.onSurface}
+          state={status === 'online' ? 'success' : status === 'offline' ? 'error' : 'warning'}
+        />
         <View style={styles.textContainer}>
           <Text style={styles.statusText}>{getStatusText()}</Text>
           {showDetails && (

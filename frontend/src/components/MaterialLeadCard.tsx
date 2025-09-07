@@ -6,12 +6,14 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { 
-  MaterialColors, 
-  MaterialElevation, 
-  MaterialSpacing, 
-  MaterialTypography 
+import {
+  MaterialColors,
+  MaterialElevation,
+  MaterialSpacing,
+  MaterialTypography,
+  MaterialShape
 } from '../styles/MaterialDesign';
+import { BusinessIcon } from './MaterialIcon';
 
 interface MaterialLeadCardProps {
   lead: {
@@ -140,10 +142,12 @@ const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
         {/* AI Summary */}
         {lead.aiSummary && (
           <View style={styles.aiContainer}>
-            <Text style={styles.aiIcon}>🤖</Text>
-            <Text style={styles.aiSummary} numberOfLines={2}>
-              {lead.aiSummary}
-            </Text>
+            <BusinessIcon
+              name="smart_toy"
+              size={16}
+              color={MaterialColors.secondary[500]}
+              state="active"
+            />
           </View>
         )}
 
@@ -228,11 +232,12 @@ const styles = StyleSheet.create({
   },
   aiContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: MaterialSpacing.md,
-    paddingTop: MaterialSpacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: MaterialColors.neutral[200],
+    alignItems: 'center',
+    backgroundColor: MaterialColors.secondary[50],
+    paddingHorizontal: MaterialSpacing.sm,
+    paddingVertical: MaterialSpacing.xs,
+    borderRadius: MaterialShape.small,
+    marginTop: MaterialSpacing.sm,
   },
   aiIcon: {
     fontSize: 14,

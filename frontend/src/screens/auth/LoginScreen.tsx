@@ -1,4 +1,5 @@
-// Login screen component
+import { StackScreenProps } from '@react-navigation/stack';
+import { AuthStackParamList } from '../../types';
 
 import React, { useState } from 'react';
 import {
@@ -13,18 +14,20 @@ import {
   ScrollView,
 } from 'react-native';
 
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { LoginForm } from '../../types';
 import { validateLoginForm, getErrorMessage, hasError } from '../../utils/validation';
 
-const LoginScreen: React.FC = () => {
-  const { login, isLoading } = useAuth();
+type LoginScreenProps = StackScreenProps<AuthStackParamList, 'Login'>;
+
+const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
+  console.log('LoginScreen: Component mounting/rendering');
   
+  const { login, isLoading } = useAuth();
   const [formData, setFormData] = useState<LoginForm>({
     email: '',
     password: '',
   });
-  
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -37,11 +40,10 @@ const LoginScreen: React.FC = () => {
   };
 
   const handleLogin = async () => {
-    if (isSubmitting || isLoading) return;
-
-    const validation = validateLoginForm(formData);
-    if (!validation.isValid) {
-      setErrors(validation.errors);
+    console.log('LoginScreen: Login button pressed');
+    const validationErrors = validateLoginForm(formData);
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
       return;
     }
 
@@ -58,16 +60,20 @@ const LoginScreen: React.FC = () => {
   };
 
   const navigateToRegister = () => {
-    // Navigation will be handled by the navigation prop
-    console.log('Navigate to register');
+    console.log('LoginScreen: Navigate to register pressed');
+    navigation.navigate('Register');
   };
 
+  console.log('LoginScreen: About to render JSX');
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.content}>
           <Text style={styles.title}>Real Estate CRM</Text>
           <Text style={styles.subtitle}>Sign in to your account</Text>
@@ -82,9 +88,9 @@ const LoginScreen: React.FC = () => {
                 ]}
                 value={formData.email}
                 onChangeText={(value) => handleInputChange('email', value)}
-                placeholder=\"Enter your email\"
-                keyboardType=\"email-address\"
-                autoCapitalize=\"none\"
+                placeholder="Enter your email"
+                keyboardType="email-address"
+                autoCapitalize="none"
                 autoCorrect={false}
                 editable={!isSubmitting && !isLoading}
               />
@@ -104,9 +110,9 @@ const LoginScreen: React.FC = () => {
                 ]}
                 value={formData.password}
                 onChangeText={(value) => handleInputChange('password', value)}
-                placeholder=\"Enter your password\"
+                placeholder="Enter your password"
                 secureTextEntry
-                autoCapitalize=\"none\"
+                autoCapitalize="none"
                 editable={!isSubmitting && !isLoading}
               />
               {hasError(errors, 'password') && (
@@ -148,7 +154,7 @@ const LoginScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f5f5f5', // Restored original background color
   },
   scrollContainer: {
     flexGrow: 1,

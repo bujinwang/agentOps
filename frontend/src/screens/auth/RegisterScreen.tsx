@@ -1,4 +1,5 @@
-// Register screen component
+import { StackScreenProps } from '@react-navigation/stack';
+import { AuthStackParamList } from '../../types';
 
 import React, { useState } from 'react';
 import {
@@ -13,11 +14,13 @@ import {
   ScrollView,
 } from 'react-native';
 
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { RegisterForm } from '../../types';
 import { validateRegisterForm, getErrorMessage, hasError } from '../../utils/validation';
 
-const RegisterScreen: React.FC = () => {
+type RegisterScreenProps = StackScreenProps<AuthStackParamList, 'Register'>;
+
+const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
   const { register, isLoading } = useAuth();
   
   const [formData, setFormData] = useState<RegisterForm>({
@@ -53,15 +56,46 @@ const RegisterScreen: React.FC = () => {
       await register(formData);
       // Navigation will be handled by AuthContext after successful registration
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Registration failed';
-      Alert.alert('Registration Error', message);
+      console.error('Registration error in RegisterScreen:', error);
+      
+      let message = 'Registration failed. Please try again.';
+      let serverValidationErrors: Record<string, string> = {};
+      
+      if (error instanceof Error) {
+        message = error.message;
+        
+        // Check if this error has validation details from the server
+        const enhancedError = error as any;
+        if (enhancedError.validationErrors && Array.isArray(enhancedError.validationErrors)) {
+          // Convert server validation errors to the format expected by the form
+          enhancedError.validationErrors.forEach((detail: any) => {
+            if (detail.path) {
+              // Map server field names to form field names
+              const fieldName = detail.path === 'firstName' ? 'firstName' :
+                              detail.path === 'lastName' ? 'lastName' :
+                              detail.path === 'email' ? 'email' :
+                              detail.path === 'password' ? 'password' : detail.path;
+              serverValidationErrors[fieldName] = detail.msg;
+            }
+          });
+          
+          // Set the server validation errors to display them in the form
+          setErrors(serverValidationErrors);
+          return; // Don't show alert since we're showing field errors
+        }
+      }
+      
+      // Show generic error alert for non-validation errors
+      Alert.alert('Registration Error', message, [
+        { text: 'OK', style: 'default' }
+      ]);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const navigateToLogin = () => {
-    console.log('Navigate to login');
+    navigation.navigate('Login');
   };
 
   return (
@@ -85,8 +119,8 @@ const RegisterScreen: React.FC = () => {
                   ]}
                   value={formData.firstName}
                   onChangeText={(value) => handleInputChange('firstName', value)}
-                  placeholder=\"First name\"
-                  autoCapitalize=\"words\"
+                  placeholder="First name"
+                  autoCapitalize="words"
                   editable={!isSubmitting && !isLoading}
                 />
                 {hasError(errors, 'firstName') && (
@@ -105,8 +139,8 @@ const RegisterScreen: React.FC = () => {
                   ]}
                   value={formData.lastName}
                   onChangeText={(value) => handleInputChange('lastName', value)}
-                  placeholder=\"Last name\"
-                  autoCapitalize=\"words\"
+                  placeholder="Last name"
+                  autoCapitalize="words"
                   editable={!isSubmitting && !isLoading}
                 />
                 {hasError(errors, 'lastName') && (
@@ -126,9 +160,9 @@ const RegisterScreen: React.FC = () => {
                 ]}
                 value={formData.email}
                 onChangeText={(value) => handleInputChange('email', value)}
-                placeholder=\"Enter your email\"
-                keyboardType=\"email-address\"
-                autoCapitalize=\"none\"
+                placeholder="Enter your email"
+                keyboardType="email-address"
+                autoCapitalize="none"
                 autoCorrect={false}
                 editable={!isSubmitting && !isLoading}
               />
@@ -148,9 +182,9 @@ const RegisterScreen: React.FC = () => {
                 ]}
                 value={formData.password}
                 onChangeText={(value) => handleInputChange('password', value)}
-                placeholder=\"Create a password (min 8 characters)\"
+                placeholder="Create a password (min 8 characters)"
                 secureTextEntry
-                autoCapitalize=\"none\"
+                autoCapitalize="none"
                 editable={!isSubmitting && !isLoading}
               />
               {hasError(errors, 'password') && (

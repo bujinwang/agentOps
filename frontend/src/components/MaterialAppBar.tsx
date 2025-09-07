@@ -12,6 +12,7 @@ import {
   MaterialSpacing, 
   MaterialTypography 
 } from '../styles/MaterialDesign';
+import { NavigationIcon } from './MaterialIcon';
 
 interface MaterialAppBarProps {
   title: string;
@@ -47,7 +48,12 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Text style={[styles.backIcon, { color: MaterialColors.onPrimary }]}>←</Text>
+          <NavigationIcon
+            name="arrow_back"
+            size={24}
+            color={MaterialColors.onPrimary}
+            state="active"
+          />
         </TouchableOpacity>
       );
     }

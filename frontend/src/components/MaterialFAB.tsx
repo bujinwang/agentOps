@@ -11,6 +11,7 @@ import {
   MaterialElevation, 
   MaterialSpacing 
 } from '../styles/MaterialDesign';
+import MaterialIcon from './MaterialIcon';
 
 interface MaterialFABProps {
   icon: string;
@@ -117,7 +118,7 @@ const MaterialFAB: React.FC<MaterialFABProps> = ({
         bottom: MaterialSpacing.md,
       },
       'bottom-center': {
-        left: '50%',
+        left: '50%' as any,
         bottom: MaterialSpacing.md,
         transform: [{ translateX: -28 }],
       },
@@ -129,7 +130,7 @@ const MaterialFAB: React.FC<MaterialFABProps> = ({
     return positions[position];
   };
 
-  const size = getSize();
+  const sizeStyles = getSize();
   const positionStyle = getPositionStyle();
 
   const FABContent = () => (
@@ -141,9 +142,9 @@ const MaterialFAB: React.FC<MaterialFABProps> = ({
       style={[
         styles.fab,
         {
-          width: size.width,
-          height: size.height,
-          borderRadius: size.borderRadius,
+          width: sizeStyles.width,
+          height: sizeStyles.height,
+          borderRadius: sizeStyles.borderRadius,
           backgroundColor: color,
         },
         positionStyle,
@@ -159,9 +160,12 @@ const MaterialFAB: React.FC<MaterialFABProps> = ({
           extended && styles.extendedFabContent,
         ]}
       >
-        <Text style={[styles.fabIcon, { fontSize: size.fontSize }]}>
-          {icon}
-        </Text>
+        <MaterialIcon
+          name={icon}
+          category="actions"
+          size={sizeStyles.iconSize}
+          color={MaterialColors.onPrimary}
+        />
         {extended && label && (
           <Text style={styles.fabLabel}>{label}</Text>
         )}

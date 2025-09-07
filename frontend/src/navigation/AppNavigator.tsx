@@ -1,17 +1,15 @@
-// Main navigation structure for the app
-
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 
-// Auth screens
+// Import screens
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
 
-// Main screens
+// Import lead screens
 import LeadsListScreen from '../screens/leads/LeadsListScreen';
 import LeadDetailScreen from '../screens/leads/LeadDetailScreen';
 import AddLeadScreen from '../screens/leads/AddLeadScreen';
@@ -20,7 +18,7 @@ import TasksScreen from '../screens/tasks/TasksScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import LoadingScreen from '../screens/LoadingScreen';
 
-// Navigation types
+// Import types
 import { 
   AuthStackParamList, 
   MainTabParamList, 
@@ -30,6 +28,10 @@ import {
   CalendarStackParamList,
   SearchStackParamList
 } from '../types';
+
+// Import icon component
+import { NavigationIcon } from '../components/MaterialIcon';
+import { MaterialColors } from '../styles/MaterialDesign';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -43,8 +45,8 @@ const SearchStack = createNativeStackNavigator<SearchStackParamList>();
 const LeadsStackNavigator = () => (
   <LeadsStack.Navigator
     screenOptions={{
-      headerStyle: { backgroundColor: '#2196F3' },
-      headerTintColor: '#fff',
+      headerStyle: { backgroundColor: MaterialColors.primary[500] },
+      headerTintColor: MaterialColors.onPrimary,
       headerTitleStyle: { fontWeight: 'bold' },
     }}
   >
@@ -72,27 +74,43 @@ const LeadsStackNavigator = () => (
 );
 
 // Auth stack navigator
-const AuthNavigator = () => (
-  <AuthStack.Navigator
-    screenOptions={{
-      headerShown: false,
-    }}
-  >
-    <AuthStack.Screen name="Login" component={LoginScreen} />
-    <AuthStack.Screen name="Register" component={RegisterScreen} />
-  </AuthStack.Navigator>
-);
+const AuthNavigator = () => {
+  console.log('AuthNavigator: Rendering AuthNavigator component');
+  return (
+    <AuthStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: '#f5f5f5' }, // Restored original background
+      }}
+    >
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="Register" component={RegisterScreen} />
+    </AuthStack.Navigator>
+  );
+};
 
-// Main tab navigator
+// Main tab navigator with vector icons
 const MainNavigator = () => (
   <Tab.Navigator
     screenOptions={{
-      tabBarStyle: { backgroundColor: '#fff' },
-      tabBarActiveTintColor: '#2196F3',
-      tabBarInactiveTintColor: '#666',
-      headerStyle: { backgroundColor: '#2196F3' },
-      headerTintColor: '#fff',
+      tabBarStyle: { 
+        backgroundColor: MaterialColors.surface,
+        borderTopColor: MaterialColors.neutral[200],
+        borderTopWidth: 1,
+        height: 80,
+        paddingBottom: 8,
+        paddingTop: 8,
+      },
+      tabBarActiveTintColor: MaterialColors.primary[500],
+      tabBarInactiveTintColor: MaterialColors.neutral[500],
+      headerStyle: { backgroundColor: MaterialColors.primary[500] },
+      headerTintColor: MaterialColors.onPrimary,
       headerTitleStyle: { fontWeight: 'bold' },
+      tabBarLabelStyle: {
+        fontSize: 12,
+        fontWeight: '500',
+        marginTop: 4,
+      },
     }}
   >
     <Tab.Screen
@@ -101,9 +119,14 @@ const MainNavigator = () => (
       options={{
         headerShown: false,
         tabBarLabel: 'Leads',
-        // tabBarIcon: ({ color, size }) => (
-        //   <Icon name="people" color={color} size={size} />
-        // ),
+        tabBarIcon: ({ color, focused }) => (
+          <NavigationIcon
+            name="leads"
+            color={color}
+            state={focused ? 'active' : 'default'}
+            size="navigation"
+          />
+        ),
       }}
     />
     <Tab.Screen
@@ -112,9 +135,14 @@ const MainNavigator = () => (
       options={{
         title: 'My Tasks',
         tabBarLabel: 'Tasks',
-        // tabBarIcon: ({ color, size }) => (
-        //   <Icon name="list" color={color} size={size} />
-        // ),
+        tabBarIcon: ({ color, focused }) => (
+          <NavigationIcon
+            name="tasks"
+            color={color}
+            state={focused ? 'active' : 'default'}
+            size="navigation"
+          />
+        ),
       }}
     />
     <Tab.Screen
@@ -123,27 +151,37 @@ const MainNavigator = () => (
       options={{
         title: 'Profile',
         tabBarLabel: 'Profile',
-        // tabBarIcon: ({ color, size }) => (
-        //   <Icon name="person" color={color} size={size} />
-        // ),
+        tabBarIcon: ({ color, focused }) => (
+          <NavigationIcon
+            name="profile"
+            color={color}
+            state={focused ? 'active' : 'default'}
+            size="navigation"
+          />
+        ),
       }}
     />
   </Tab.Navigator>
 );
 
 // Main app navigator
-const AppNavigator: React.FC = () => {
+function AppNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  console.log('AppNavigator: Rendering with state', {
+    isAuthenticated,
+    isLoading,
+    timestamp: new Date().toISOString()
+  });
+
   if (isLoading) {
+    console.log('AppNavigator: Showing loading screen');
     return <LoadingScreen />;
   }
 
-  return (
-    <NavigationContainer>
-      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
-    </NavigationContainer>
-  );
+  const navigator = isAuthenticated ? <MainNavigator /> : <AuthNavigator />;
+  console.log('AppNavigator: Showing', isAuthenticated ? 'MainNavigator' : 'AuthNavigator');
+  return navigator;
 };
 
 export default AppNavigator;

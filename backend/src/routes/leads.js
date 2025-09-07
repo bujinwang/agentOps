@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, query, validationResult } = require('express-validator');
+const { body, query, param, validationResult } = require('express-validator');
 const Lead = require('../models/Lead');
 const Interaction = require('../models/Interaction');
 const { authenticate } = require('../middleware/auth');
