@@ -80,7 +80,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const login = async (credentials: LoginForm): Promise<void> => {
+  const login = async (credentials: LoginForm, retryCount = 0): Promise<void> => {
+    const MAX_RETRIES = 2;
+
     try {
       setIsLoading(true);
       console.log('AuthContext: Starting login process');
@@ -119,7 +121,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('AuthContext: Login process completed successfully');
     } catch (error) {
       console.error('Login error in AuthContext:', error);
-      throw error;
+
+      // Retry logic for network errors
+      if (retryCount < MAX_RETRIES && error instanceof Error) {
+        if (error.message.includes('timeout') ||
+            error.message.includes('AbortError') ||
+            error.message.includes('Network request failed') ||
+            error.message.includes('fetch')) {
+
+          console.log(`Login retry attempt ${retryCount + 1}/${MAX_RETRIES}`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Exponential backoff
+          return login(credentials, retryCount + 1);
+        }
+      }
+
+      // Enhanced error handling after retries exhausted
+      if (error instanceof Error) {
+        if (error.message.includes('timeout') || error.message.includes('AbortError')) {
+          throw new Error('Request timed out after retries. Please check your internet connection and try again.');
+        } else if (error.message.includes('Network request failed') || error.message.includes('fetch')) {
+          throw new Error('Unable to connect to the server after retries. Please check your internet connection.');
+        }
+        throw error;
+      }
+
+      throw new Error('Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }

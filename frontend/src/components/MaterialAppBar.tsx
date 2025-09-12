@@ -7,12 +7,13 @@ import {
   Platform,
   StatusBar,
 } from 'react-native';
-import { 
-  MaterialColors, 
-  MaterialSpacing, 
-  MaterialTypography 
+import {
+  MaterialColors,
+  MaterialSpacing,
+  MaterialTypography
 } from '../styles/MaterialDesign';
 import { NavigationIcon } from './MaterialIcon';
+import { useResponsive } from '../hooks/useResponsive';
 
 interface MaterialAppBarProps {
   title: string;
@@ -35,6 +36,25 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
   onBack,
   centerTitle = false,
 }) => {
+  const {
+    deviceType,
+    getResponsiveFontSize,
+    getResponsiveSpacing,
+    getTouchTargetSize,
+    isLandscape,
+  } = useResponsive();
+
+  // Responsive dimensions
+  const appBarHeight = deviceType === 'desktop' ? 64 : deviceType === 'tablet' ? 60 : 56;
+  const contentHeight = deviceType === 'desktop' ? 56 : deviceType === 'tablet' ? 52 : 48;
+  const touchTargetSize = getTouchTargetSize();
+  const responsiveSpacing = getResponsiveSpacing(MaterialSpacing.md);
+  const responsiveTitleSize = getResponsiveFontSize(22); // titleLarge base
+  const responsiveSubtitleSize = getResponsiveFontSize(14); // bodySmall base
+
+  // Adjust for landscape orientation
+  const adjustedAppBarHeight = isLandscape && deviceType === 'mobile' ? appBarHeight - 8 : appBarHeight;
+  const adjustedContentHeight = isLandscape && deviceType === 'mobile' ? contentHeight - 8 : contentHeight;
   const renderLeading = () => {
     if (leading) {
       return leading;
@@ -43,14 +63,18 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
     if (onBack) {
       return (
         <TouchableOpacity
-          style={styles.backButton}
+          style={[styles.backButton, {
+            width: touchTargetSize,
+            height: touchTargetSize,
+            borderRadius: touchTargetSize / 2,
+          }]}
           onPress={onBack}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <NavigationIcon
             name="arrow_back"
-            size={24}
+            size={deviceType === 'desktop' ? 28 : deviceType === 'tablet' ? 26 : 24}
             color={MaterialColors.onPrimary}
             state="active"
           />
@@ -77,16 +101,22 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
 
   const renderTitle = () => (
     <View style={[styles.titleContainer, centerTitle && styles.centeredTitle]}>
-      <Text 
-        style={[styles.title, { color: MaterialColors.onPrimary }]}
+      <Text
+        style={[styles.title, {
+          color: MaterialColors.onPrimary,
+          fontSize: responsiveTitleSize,
+        }]}
         numberOfLines={1}
         ellipsizeMode="tail"
       >
         {title}
       </Text>
       {subtitle && (
-        <Text 
-          style={[styles.subtitle, { color: MaterialColors.onPrimary }]}
+        <Text
+          style={[styles.subtitle, {
+            color: MaterialColors.onPrimary,
+            fontSize: responsiveSubtitleSize,
+          }]}
           numberOfLines={1}
           ellipsizeMode="tail"
         >
@@ -97,12 +127,19 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
   );
 
   return (
-    <View style={[styles.container, { backgroundColor, elevation }]}>
+    <View style={[styles.container, {
+      backgroundColor,
+      elevation,
+      minHeight: adjustedAppBarHeight + (Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0),
+    }]}>
       <StatusBar
         backgroundColor={backgroundColor}
         barStyle="light-content"
       />
-      <View style={styles.content}>
+      <View style={[styles.content, {
+        height: adjustedContentHeight,
+        paddingHorizontal: responsiveSpacing,
+      }]}>
         {renderLeading()}
         {renderTitle()}
         {renderActions()}

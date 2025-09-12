@@ -1,7 +1,7 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,6 +31,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleInputChange = (field: keyof LoginForm, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -41,9 +43,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
   const handleLogin = async () => {
     console.log('LoginScreen: Login button pressed');
-    const validationErrors = validateLoginForm(formData);
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
+    const validationResult = validateLoginForm(formData);
+    if (!validationResult.isValid) {
+      setErrors(validationResult.errors);
       return;
     }
 
@@ -52,8 +54,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       setErrors({});
       await login(formData);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Login failed';
-      Alert.alert('Login Error', message);
+      let errorMessage = 'Login failed. Please try again.';
+      let errorTitle = 'Login Error';
+
+      if (error instanceof Error) {
+        // Handle specific error types
+        if (error.message.includes('Invalid credentials')) {
+          errorMessage = 'The email or password you entered is incorrect. Please check your credentials and try again.';
+          errorTitle = 'Invalid Credentials';
+        } else if (error.message.includes('Network error') || error.message.includes('timeout') || error.message.includes('AbortError')) {
+          errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
+          errorTitle = 'Connection Error';
+        } else if (error.message.includes('Rate limit') || error.message.includes('Too many')) {
+          errorMessage = 'Too many login attempts detected. Please wait a few minutes before trying again to protect your account security.';
+          errorTitle = 'Rate Limited';
+        } else if ((error as any).status === 429) {
+          errorMessage = 'Too many login attempts. Your account is temporarily locked for security. Please wait 15 minutes before trying again.';
+          errorTitle = 'Account Temporarily Locked';
+        } else if ((error as any).status >= 500) {
+          errorMessage = 'Server error occurred. Our team has been notified. Please try again later.';
+          errorTitle = 'Server Error';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      Alert.alert(errorTitle, errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -122,6 +148,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               )}
             </View>
 
+            {/* Remember Me Checkbox */}
+            <View style={styles.checkboxContainer}>
+              <TouchableOpacity
+                style={styles.checkbox}
+                onPress={() => setRememberMe(!rememberMe)}
+                disabled={isSubmitting || isLoading}
+              >
+                <View style={[styles.checkboxBox, rememberMe && styles.checkboxChecked]}>
+                  {rememberMe && <Text style={styles.checkboxMark}>✓</Text>}
+                </View>
+                <Text style={styles.checkboxLabel}>Remember me</Text>
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
               style={[
                 styles.loginButton,
@@ -130,9 +170,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               onPress={handleLogin}
               disabled={isSubmitting || isLoading}
             >
-              <Text style={styles.loginButtonText}>
-                {isSubmitting || isLoading ? 'Signing In...' : 'Sign In'}
-              </Text>
+              {(isSubmitting || isLoading) ? (
+                <View style={styles.buttonContent}>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={[styles.loginButtonText, styles.buttonTextWithSpinner]}>
+                    Signing In...
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.loginButtonText}>Sign In</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -235,6 +282,48 @@ const styles = StyleSheet.create({
   registerLinkText: {
     color: '#2196F3',
     fontSize: 14,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  checkbox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderRadius: 4,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  checkboxChecked: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  checkboxMark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  checkboxLabel: {
+    fontSize: 14,
+    color: '#333',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonTextWithSpinner: {
+    marginLeft: 8,
   },
 });
 

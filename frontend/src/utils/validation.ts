@@ -149,8 +149,14 @@ export const rules = {
 // Specific form validators
 export const validateLoginForm = (data: LoginForm): ValidationResult => {
   return validate(data, {
-    email: [rules.required(), rules.email()],
-    password: [rules.required(), rules.minLength(6)],
+    email: [
+      rules.required('Email address is required'),
+      rules.email('Please enter a valid email address')
+    ],
+    password: [
+      rules.required('Password is required'),
+      rules.minLength(1, 'Please enter your password')
+    ],
   });
 };
 

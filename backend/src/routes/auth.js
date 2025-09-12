@@ -5,8 +5,13 @@ const User = require('../models/User');
 const { authenticate, refreshToken, generateTokens } = require('../middleware/auth');
 const { ERROR_MESSAGES, VALIDATION_RULES } = require('../config/constants');
 const { logger } = require('../config/logger');
+const { authRateLimiter } = require('../config/rateLimiting');
+const { apiSecurityHeaders } = require('../middleware/securityHeaders');
 
 const router = express.Router();
+
+// Apply security headers to all auth routes
+router.use(apiSecurityHeaders);
 
 // Validation middleware
 const handleValidationErrors = (req, res, next) => {
@@ -60,7 +65,7 @@ const loginValidation = [
 ];
 
 // Register endpoint
-router.post('/register', registerValidation, handleValidationErrors, async (req, res) => {
+router.post('/register', authRateLimiter, registerValidation, handleValidationErrors, async (req, res) => {
   try {
     const { email, password, firstName, lastName } = req.body;
 
@@ -103,26 +108,40 @@ router.post('/register', registerValidation, handleValidationErrors, async (req,
 });
 
 // Login endpoint
-router.post('/login', loginValidation, handleValidationErrors, async (req, res) => {
+router.post('/login', authRateLimiter, loginValidation, handleValidationErrors, async (req, res) => {
   try {
     const { email, password } = req.body;
 
     // Find user by email
     const userResult = await User.findByEmail(email);
-    
-    if (!userResult) {
-      return res.status(401).json({
-        error: 'Invalid credentials',
-        message: ERROR_MESSAGES.INVALID_CREDENTIALS
-      });
+
+    // Always perform password verification to prevent timing attacks
+    let passwordHash = '';
+    let user = null;
+    const loginAttemptTime = Date.now();
+
+    if (userResult) {
+      ({ user, passwordHash } = userResult);
+    } else {
+      // Use a dummy hash for timing attack prevention
+      passwordHash = '$2a$10$dummy.hash.for.timing.attack.prevention';
     }
 
-    const { user, passwordHash } = userResult;
-
-    // Verify password
+    // Verify password (timing-safe comparison)
     const isPasswordValid = await User.verifyPassword(password, passwordHash);
-    
-    if (!isPasswordValid) {
+
+    // Return same error regardless of whether user exists or password is wrong
+    if (!userResult || !isPasswordValid) {
+      const failureReason = !userResult ? 'user_not_found' : 'invalid_password';
+      logger.warn(`Failed login attempt`, {
+        email,
+        reason: failureReason,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip,
+        timestamp: new Date().toISOString(),
+        processingTime: Date.now() - loginAttemptTime
+      });
+
       return res.status(401).json({
         error: 'Invalid credentials',
         message: ERROR_MESSAGES.INVALID_CREDENTIALS
@@ -132,7 +151,14 @@ router.post('/login', loginValidation, handleValidationErrors, async (req, res) 
     // Generate tokens
     const tokens = generateTokens(user);
 
-    logger.info(`User logged in successfully: ${user.email}`);
+    logger.info(`User login successful`, {
+      userId: user.user_id,
+      email: user.email,
+      userAgent: req.get('User-Agent'),
+      ip: req.ip,
+      timestamp: new Date().toISOString(),
+      processingTime: Date.now() - loginAttemptTime
+    });
 
     res.json({
       message: 'Login successful',
@@ -151,7 +177,7 @@ router.post('/login', loginValidation, handleValidationErrors, async (req, res) 
 });
 
 // Refresh token endpoint
-router.post('/refresh', refreshToken);
+router.post('/refresh', authRateLimiter, refreshToken);
 
 // Get current user profile
 router.get('/profile', authenticate, async (req, res) => {
