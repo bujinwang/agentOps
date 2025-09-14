@@ -7,12 +7,14 @@ import {
   Animated,
   Switch,
 } from 'react-native';
-import { 
-  MaterialColors, 
-  MaterialSpacing, 
+import {
+  MaterialColors,
+  MaterialSpacing,
   MaterialTypography,
-  MaterialShape 
+  MaterialShape,
+  MaterialElevation
 } from '../styles/MaterialDesign';
+import { useResponsive } from '../hooks/useResponsive';
 
 interface MaterialCheckboxProps {
   label: string;
@@ -46,6 +48,14 @@ const MaterialCheckbox: React.FC<MaterialCheckboxProps> = ({
 }) => {
   const scaleValue = new Animated.Value(checked ? 1 : 0);
 
+  // Responsive utilities
+  const { getResponsiveSpacing, getTouchTargetSize, getResponsiveFontSize } = useResponsive();
+
+  // Responsive dimensions
+  const responsiveSpacing = getResponsiveSpacing(MaterialSpacing.sm);
+  const touchTargetSize = getTouchTargetSize(44);
+  const responsiveLabelSize = getResponsiveFontSize(14); // bodyMedium base
+
   React.useEffect(() => {
     Animated.spring(scaleValue, {
       toValue: checked ? 1 : 0,
@@ -75,7 +85,14 @@ const MaterialCheckbox: React.FC<MaterialCheckboxProps> = ({
 
   return (
     <TouchableOpacity
-      style={styles.checkboxContainer}
+      style={[
+        styles.checkboxContainer,
+        {
+          marginVertical: getResponsiveSpacing(MaterialSpacing.xs),
+          minWidth: touchTargetSize,
+          minHeight: touchTargetSize,
+        }
+      ]}
       onPress={handlePress}
       disabled={disabled}
       activeOpacity={0.8}
@@ -86,6 +103,9 @@ const MaterialCheckbox: React.FC<MaterialCheckboxProps> = ({
           {
             borderColor: getBorderColor(),
             backgroundColor: getBackgroundColor(),
+            width: Math.max(20, touchTargetSize * 0.5),
+            height: Math.max(20, touchTargetSize * 0.5),
+            marginRight: responsiveSpacing,
           },
           disabled && styles.disabledCheckbox,
         ]}
@@ -105,7 +125,10 @@ const MaterialCheckbox: React.FC<MaterialCheckboxProps> = ({
 
       <Text style={[
         styles.checkboxLabel,
-        { color: disabled ? MaterialColors.neutral[500] : MaterialColors.neutral[900] }
+        {
+          color: disabled ? MaterialColors.neutral[500] : MaterialColors.neutral[900],
+          fontSize: responsiveLabelSize,
+        }
       ]}>
         {label}
       </Text>
@@ -223,7 +246,7 @@ const MaterialSwitch: React.FC<MaterialSwitchProps> = ({
 
       <View style={[
         styles.switchTrack,
-        { backgroundColor: backgroundColorInterpolate },
+        { backgroundColor: backgroundColorInterpolate as any },
         disabled && styles.disabledSwitchTrack,
       ]}>
         <Animated.View

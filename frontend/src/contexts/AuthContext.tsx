@@ -15,6 +15,7 @@ import {
   RegisterForm,
 } from '../types';
 import { apiService } from '../services/api';
+import { getAuthError, getNetworkError, ErrorTemplate } from '../utils/errorMessages';
 
 const TOKEN_KEY = '@RealEstateCRM:token';
 const USER_KEY = '@RealEstateCRM:user';
@@ -138,14 +139,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Enhanced error handling after retries exhausted
       if (error instanceof Error) {
         if (error.message.includes('timeout') || error.message.includes('AbortError')) {
-          throw new Error('Request timed out after retries. Please check your internet connection and try again.');
+          const networkError = getNetworkError('timeout');
+          throw new Error(networkError.message);
         } else if (error.message.includes('Network request failed') || error.message.includes('fetch')) {
-          throw new Error('Unable to connect to the server after retries. Please check your internet connection.');
+          const networkError = getNetworkError('serverError');
+          throw new Error(networkError.message);
+        } else if (error.message.includes('Invalid credentials') || error.message.includes('401')) {
+          const authError = getAuthError('invalidCredentials');
+          throw new Error(authError.message);
+        } else if (error.message.includes('429') || error.message.includes('Too many')) {
+          const authError = getAuthError('accountLocked');
+          throw new Error(authError.message);
         }
         throw error;
       }
 
-      throw new Error('Login failed. Please try again.');
+      const authError = getAuthError('invalidCredentials');
+      throw new Error(authError.message);
     } finally {
       setIsLoading(false);
     }
@@ -185,11 +195,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } else if (error.message.includes('timeout')) {
           errorMessage = 'Request timeout. The server may be unreachable.';
         } else if (error.message.includes('Email already exists')) {
-          errorMessage = 'This email address is already registered. Please use a different email or try logging in.';
+          const authError = getAuthError('emailExists');
+          errorMessage = authError.message;
         } else if (error.message.includes('HTTP 4')) {
-          errorMessage = 'Registration validation failed. Please check your input and try again.';
+          const authError = getAuthError('weakPassword');
+          errorMessage = authError.message;
         } else if (error.message.includes('HTTP 5')) {
-          errorMessage = 'Server error. Please try again later or contact support.';
+          const networkError = getNetworkError('serverError');
+          errorMessage = networkError.message;
         } else {
           errorMessage = error.message;
         }

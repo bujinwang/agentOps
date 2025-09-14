@@ -29,6 +29,14 @@ export interface Lead {
   aiSummary?: string;
   lastContactedAt?: string;
   followUpDate?: string;
+  // Scoring fields
+  score?: number; // Calculated score (0-100)
+  scoreCategory?: LeadScoreCategory; // High/Medium/Low
+  scoreBreakdown?: LeadScoreBreakdown; // Detailed scoring components
+  scoreLastCalculated?: string; // When score was last calculated
+  scoreHistory?: LeadScoreHistory[]; // Historical scores for trend analysis
+  manualScoreOverride?: number; // Manual override by agent
+  manualScoreReason?: string; // Reason for manual override
   createdAt: string;
   updatedAt: string;
 }
@@ -69,6 +77,51 @@ export type LeadStatus =
   | 'Archived';
 
 export type LeadPriority = 'High' | 'Medium' | 'Low';
+
+// Scoring Types
+export type LeadScoreCategory = 'High' | 'Medium' | 'Low';
+
+export interface LeadScoreBreakdown {
+  budget: number; // 0-30 points
+  timeline: number; // 0-25 points
+  propertyType: number; // 0-20 points
+  location: number; // 0-15 points
+  engagement: number; // 0-10 points
+}
+
+export interface LeadScoreHistory {
+  score: number;
+  category: LeadScoreCategory;
+  calculatedAt: string;
+  breakdown: LeadScoreBreakdown;
+  trigger: 'auto' | 'manual' | 'update';
+}
+
+export interface ScoringCriteria {
+  budget: {
+    high: { min: number; max: number; score: number };
+    medium: { min: number; max: number; score: number };
+    low: { min: number; max: number; score: number };
+  };
+  timeline: {
+    urgent: { days: number; score: number };
+    soon: { days: number; score: number };
+    flexible: { days: number; score: number };
+  };
+  propertyType: {
+    [key: string]: number; // Property type to score mapping
+  };
+  location: {
+    premium: string[]; // Premium locations
+    standard: string[]; // Standard locations
+    score: { premium: number; standard: number; other: number };
+  };
+  engagement: {
+    high: { interactions: number; score: number };
+    medium: { interactions: number; score: number };
+    low: { interactions: number; score: number };
+  };
+}
 
 export type PropertyType = 
   | 'Condo' 
@@ -164,8 +217,7 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Leads: undefined;
   Tasks: undefined;
-  Calendar: undefined;
-  Search: undefined;
+  Analytics: undefined;
   Profile: undefined;
 };
 
@@ -217,6 +269,7 @@ export interface LeadFilters {
   priority?: LeadPriority;
   searchTerm?: string;
   propertyType?: PropertyType;
+  scoreCategory?: 'High' | 'Medium' | 'Low';
 }
 
 export interface PaginationParams {
@@ -257,4 +310,61 @@ export interface NotificationsResponse {
   data: Notification[];
   total: number;
   unread: number;
+}
+
+// Analytics Types
+export interface DashboardKPIs {
+  totalLeads: number;
+  newLeads: number;
+  activeTasks: number;
+  completedTasks: number;
+  leadsThisMonth: number;
+  conversionRate: number;
+  averageDealSize: number;
+  responseTimeHours: number;
+  highScoreLeads: number;
+  mediumScoreLeads: number;
+  lowScoreLeads: number;
+}
+
+export interface LeadAnalytics {
+  leadsByStatus: Array<{ status: string; count: number; percentage: number }>;
+  leadsBySource: Array<{ source: string; count: number; percentage: number }>;
+  leadsByPriority: Array<{ priority: string; count: number; percentage: number }>;
+  leadsByScoreCategory: Array<{ category: string; count: number; percentage: number }>;
+  leadsOverTime: Array<{ date: string; count: number; new: number; converted: number }>;
+  conversionFunnel: Array<{ stage: string; count: number; percentage: number }>;
+}
+
+export interface PerformanceMetrics {
+  agentPerformance: Array<{
+    agentId: number;
+    agentName: string;
+    leadsManaged: number;
+    conversionRate: number;
+    averageResponseTime: number;
+    totalRevenue: number;
+  }>;
+  teamBenchmarks: {
+    averageConversionRate: number;
+    averageResponseTime: number;
+    topPerformerRate: number;
+  };
+  marketComparison: {
+    localAverageRate: number;
+    industryAverageRate: number;
+  };
+}
+
+export interface DateRange {
+  startDate: string;
+  endDate: string;
+}
+
+export interface AnalyticsFilters {
+  dateRange?: DateRange;
+  agentId?: number;
+  leadSource?: string;
+  propertyType?: PropertyType;
+  scoreCategory?: 'High' | 'Medium' | 'Low';
 }

@@ -1,4 +1,4 @@
-// Lead detail screen with full information and actions
+// Lead detail screen with enhanced Material Design layout and interactions
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -9,11 +9,23 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 
 import { Lead, LeadStatus } from '../../types';
 import { apiService } from '../../services/api';
 import { formatCurrency, formatPhoneNumber } from '../../utils/validation';
+import {
+  MaterialColors,
+  MaterialElevation,
+  MaterialSpacing,
+  MaterialTypography,
+  MaterialShape,
+  MaterialMotion,
+} from '../../styles/MaterialDesign';
+import { BusinessIcon } from '../../components/MaterialIcon';
+
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
 interface LeadDetailScreenProps {
   route: {
@@ -28,10 +40,31 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
   const { leadId } = route.params;
   const [lead, setLead] = useState<Lead | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(50));
+  const [actionScaleAnim] = useState(new Animated.Value(1));
 
   useEffect(() => {
     loadLeadDetail();
   }, [leadId]);
+
+  useEffect(() => {
+    if (lead) {
+      // Start entrance animations
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: MaterialMotion.duration.medium1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: MaterialMotion.duration.medium2,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [lead]);
 
   const loadLeadDetail = async () => {
     try {
@@ -79,27 +112,42 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
     navigation.navigate('EditLead', { leadId });
   };
 
+  const animateActionPress = () => {
+    Animated.sequence([
+      Animated.timing(actionScaleAnim, {
+        toValue: 0.95,
+        duration: MaterialMotion.duration.short2,
+        useNativeDriver: true,
+      }),
+      Animated.timing(actionScaleAnim, {
+        toValue: 1,
+        duration: MaterialMotion.duration.short2,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
   const getStatusColor = (status: LeadStatus): string => {
-    switch (status) {
-      case 'New': return '#4CAF50';
-      case 'Contacted': return '#FF9800';
-      case 'Qualified': return '#2196F3';
-      case 'Showing Scheduled': return '#9C27B0';
-      case 'Offer Made': return '#FF5722';
-      case 'Closed Won': return '#4CAF50';
-      case 'Closed Lost': return '#F44336';
-      case 'Archived': return '#999';
-      default: return '#999';
-    }
+    const colors = {
+      'New': MaterialColors.secondary[500],
+      'Contacted': MaterialColors.warning[500],
+      'Qualified': MaterialColors.primary[500],
+      'Showing Scheduled': MaterialColors.neutral[600],
+      'Offer Made': MaterialColors.error[500],
+      'Closed Won': MaterialColors.secondary[700],
+      'Closed Lost': MaterialColors.error[600],
+      'Archived': MaterialColors.neutral[400],
+    };
+    return colors[status] || MaterialColors.neutral[500];
   };
 
   const getPriorityColor = (priority: string): string => {
-    switch (priority) {
-      case 'High': return '#F44336';
-      case 'Medium': return '#FF9800';
-      case 'Low': return '#4CAF50';
-      default: return '#999';
-    }
+    const colors = {
+      'High': MaterialColors.error[500],
+      'Medium': MaterialColors.warning[500],
+      'Low': MaterialColors.secondary[500],
+    };
+    return colors[priority as keyof typeof colors] || MaterialColors.neutral[500];
   };
 
   const statusOptions: LeadStatus[] = [
@@ -133,7 +181,15 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
   return (
     <ScrollView style={styles.container}>
       {/* Header Card */}
-      <View style={styles.headerCard}>
+      <Animated.View
+        style={[
+          styles.headerCard,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
         <View style={styles.headerRow}>
           <View style={styles.headerInfo}>
             <Text style={styles.leadName}>
@@ -141,43 +197,230 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
             </Text>
             <Text style={styles.leadEmail}>{lead.email}</Text>
             {lead.phoneNumber && (
-              <Text style={styles.leadPhone}>
-                {formatPhoneNumber(lead.phoneNumber)}
-              </Text>
+              <View style={styles.contactRow}>
+                <BusinessIcon
+                  name="call"
+                  size={16}
+                  color={MaterialColors.neutral[600]}
+                  state="default"
+                />
+                <Text style={styles.leadPhone}>
+                  {formatPhoneNumber(lead.phoneNumber)}
+                </Text>
+              </View>
             )}
           </View>
           <View style={styles.headerBadges}>
-            <Text style={[styles.priorityBadge, { backgroundColor: getPriorityColor(lead.priority) }]}>
-              {lead.priority} Priority
-            </Text>
+            <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(lead.priority) }]}>
+              <Text style={styles.priorityText}>{lead.priority}</Text>
+            </View>
           </View>
         </View>
 
-        <Text style={[styles.statusBadge, { backgroundColor: getStatusColor(lead.status) }]}>
-          {lead.status}
-        </Text>
-      </View>
+        <View style={styles.statusContainer}>
+          <BusinessIcon
+            name="flag"
+            size={16}
+            color={getStatusColor(lead.status)}
+            state="default"
+          />
+          <Text style={[styles.statusBadge, { color: getStatusColor(lead.status) }]}>
+            {lead.status}
+          </Text>
+        </View>
+      </Animated.View>
 
       {/* Quick Actions */}
-      <View style={styles.actionCard}>
+      <Animated.View
+        style={[
+          styles.actionCard,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.actionButton} onPress={navigateToEdit}>
-            <Text style={styles.actionButtonText}>✏️ Edit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>📞 Call</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>📧 Email</Text>
-          </TouchableOpacity>
+          <AnimatedTouchableOpacity
+            style={[
+              styles.actionButton,
+              { transform: [{ scale: actionScaleAnim }] },
+            ]}
+            onPress={() => {
+              animateActionPress();
+              setTimeout(navigateToEdit, MaterialMotion.duration.short2);
+            }}
+          >
+            <BusinessIcon
+              name="edit"
+              size={20}
+              color={MaterialColors.primary[600]}
+              state="default"
+            />
+            <Text style={styles.actionButtonText}>Edit</Text>
+          </AnimatedTouchableOpacity>
+          <AnimatedTouchableOpacity
+            style={[
+              styles.actionButton,
+              { transform: [{ scale: actionScaleAnim }] },
+            ]}
+            onPress={() => {
+              animateActionPress();
+              setTimeout(() => {
+                if (lead?.phoneNumber) {
+                  Alert.alert('Call', `Call ${lead.phoneNumber}?`);
+                }
+              }, MaterialMotion.duration.short2);
+            }}
+          >
+            <BusinessIcon
+              name="call"
+              size={20}
+              color={MaterialColors.secondary[600]}
+              state="default"
+            />
+            <Text style={styles.actionButtonText}>Call</Text>
+          </AnimatedTouchableOpacity>
+          <AnimatedTouchableOpacity
+            style={[
+              styles.actionButton,
+              { transform: [{ scale: actionScaleAnim }] },
+            ]}
+            onPress={() => {
+              animateActionPress();
+              setTimeout(() => {
+                if (lead?.email) {
+                  Alert.alert('Email', `Send email to ${lead.email}?`);
+                }
+              }, MaterialMotion.duration.short2);
+            }}
+          >
+            <BusinessIcon
+              name="email"
+              size={20}
+              color={MaterialColors.neutral[700]}
+              state="default"
+            />
+            <Text style={styles.actionButtonText}>Email</Text>
+          </AnimatedTouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
+
+      {/* Lead Scoring */}
+      {lead.score && (
+        <View style={styles.card}>
+          <View style={styles.scoringHeader}>
+            <Text style={styles.sectionTitle}>Lead Scoring</Text>
+            <View style={[styles.scoreBadge, {
+              backgroundColor: lead.scoreCategory === 'High' ? MaterialColors.secondary[600] :
+                              lead.scoreCategory === 'Medium' ? MaterialColors.warning[600] :
+                              MaterialColors.error[600]
+            }]}>
+              <BusinessIcon
+                name="star"
+                size={16}
+                color={MaterialColors.onPrimary}
+                state="active"
+              />
+              <Text style={styles.scoreText}>{lead.score}/100</Text>
+              <Text style={styles.categoryText}>{lead.scoreCategory}</Text>
+            </View>
+          </View>
+
+          {/* Scoring Breakdown */}
+          {lead.scoreBreakdown && (
+            <View style={styles.scoringBreakdown}>
+              <Text style={styles.subsectionTitle}>Scoring Breakdown</Text>
+
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Budget (30%):</Text>
+                <Text style={styles.breakdownValue}>{lead.scoreBreakdown.budget}/30</Text>
+              </View>
+
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Timeline (25%):</Text>
+                <Text style={styles.breakdownValue}>{lead.scoreBreakdown.timeline}/25</Text>
+              </View>
+
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Property Type (20%):</Text>
+                <Text style={styles.breakdownValue}>{lead.scoreBreakdown.propertyType}/20</Text>
+              </View>
+
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Location (15%):</Text>
+                <Text style={styles.breakdownValue}>{lead.scoreBreakdown.location}/15</Text>
+              </View>
+
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Engagement (10%):</Text>
+                <Text style={styles.breakdownValue}>{lead.scoreBreakdown.engagement}/10</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Manual Override */}
+          <View style={styles.overrideSection}>
+            <Text style={styles.subsectionTitle}>Manual Override</Text>
+            {lead.manualScoreOverride ? (
+              <View style={styles.overrideInfo}>
+                <Text style={styles.overrideText}>
+                  Manual Score: {lead.manualScoreOverride}/100
+                </Text>
+                {lead.manualScoreReason && (
+                  <Text style={styles.overrideReason}>
+                    Reason: {lead.manualScoreReason}
+                  </Text>
+                )}
+                <TouchableOpacity
+                  style={styles.overrideButton}
+                  onPress={() => Alert.alert('Override Score', 'Remove manual score override?')}
+                >
+                  <Text style={styles.overrideButtonText}>Remove Override</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.overrideButton}
+                onPress={() => Alert.alert('Override Score', 'Set manual score override?')}
+              >
+                <Text style={styles.overrideButtonText}>Set Manual Score</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Scoring History */}
+          {lead.scoreHistory && lead.scoreHistory.length > 0 && (
+            <View style={styles.historySection}>
+              <Text style={styles.subsectionTitle}>Scoring History</Text>
+              {lead.scoreHistory.slice(0, 5).map((history, index) => (
+                <View key={index} style={styles.historyItem}>
+                  <View style={styles.historyHeader}>
+                    <Text style={styles.historyScore}>{history.score}/100</Text>
+                    <Text style={styles.historyDate}>
+                      {new Date(history.calculatedAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  <Text style={styles.historyTrigger}>{history.trigger}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Last Calculated */}
+          {lead.scoreLastCalculated && (
+            <Text style={styles.lastCalculated}>
+              Last calculated: {new Date(lead.scoreLastCalculated).toLocaleString()}
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* Property Requirements */}
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Property Requirements</Text>
-        
+
         {(lead.budgetMin || lead.budgetMax) && (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Budget Range:</Text>
@@ -311,45 +554,41 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: MaterialColors.neutral[50],
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: MaterialColors.neutral[50],
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    marginTop: MaterialSpacing.md,
+    ...MaterialTypography.bodyLarge,
+    color: MaterialColors.neutral[600],
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: MaterialColors.neutral[50],
   },
   errorText: {
-    fontSize: 18,
-    color: '#f44336',
+    ...MaterialTypography.headlineSmall,
+    color: MaterialColors.error[600],
   },
   headerCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    margin: 16,
-    marginBottom: 8,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: MaterialColors.surface,
+    padding: MaterialSpacing.lg,
+    margin: MaterialSpacing.md,
+    marginBottom: MaterialSpacing.sm,
+    borderRadius: MaterialShape.medium,
+    ...MaterialElevation.level2,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: MaterialSpacing.md,
   },
   headerInfo: {
     flex: 1,
@@ -357,49 +596,54 @@ const styles = StyleSheet.create({
   headerBadges: {
     alignItems: 'flex-end',
   },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: MaterialSpacing.xs,
+  },
   leadName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    ...MaterialTypography.headlineSmall,
+    color: MaterialColors.neutral[900],
+    marginBottom: MaterialSpacing.xs,
   },
   leadEmail: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 2,
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
+    marginBottom: MaterialSpacing.xs,
   },
   leadPhone: {
-    fontSize: 16,
-    color: '#666',
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
+    marginLeft: MaterialSpacing.xs,
   },
   priorityBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '500',
+    paddingHorizontal: MaterialSpacing.sm,
+    paddingVertical: MaterialSpacing.xs,
+    borderRadius: MaterialShape.full,
+    marginBottom: MaterialSpacing.xs,
   },
-  statusBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    fontSize: 14,
-    color: '#fff',
+  priorityText: {
+    ...MaterialTypography.labelSmall,
+    color: MaterialColors.onPrimary,
     fontWeight: '600',
   },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: MaterialSpacing.sm,
+  },
+  statusBadge: {
+    ...MaterialTypography.labelLarge,
+    fontWeight: '600',
+    marginLeft: MaterialSpacing.xs,
+  },
   actionCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: MaterialColors.surface,
+    padding: MaterialSpacing.lg,
+    marginHorizontal: MaterialSpacing.md,
+    marginBottom: MaterialSpacing.sm,
+    borderRadius: MaterialShape.medium,
+    ...MaterialElevation.level2,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -407,63 +651,62 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
-    paddingVertical: 12,
-    marginHorizontal: 4,
-    borderRadius: 8,
+    backgroundColor: MaterialColors.neutral[100],
+    paddingVertical: MaterialSpacing.md,
+    marginHorizontal: MaterialSpacing.xs,
+    borderRadius: MaterialShape.medium,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: MaterialColors.neutral[300],
+    minHeight: 60,
   },
   actionButtonText: {
-    fontSize: 14,
-    color: '#333',
+    ...MaterialTypography.labelMedium,
+    color: MaterialColors.neutral[800],
     fontWeight: '500',
+    marginTop: MaterialSpacing.xs,
   },
   card: {
-    backgroundColor: '#fff',
-    padding: 20,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: MaterialColors.surface,
+    padding: MaterialSpacing.lg,
+    marginHorizontal: MaterialSpacing.md,
+    marginBottom: MaterialSpacing.sm,
+    borderRadius: MaterialShape.medium,
+    ...MaterialElevation.level1,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
+    ...MaterialTypography.titleMedium,
+    color: MaterialColors.neutral[900],
+    marginBottom: MaterialSpacing.md,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: MaterialSpacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: MaterialColors.neutral[200],
   },
   infoLabel: {
-    fontSize: 14,
-    color: '#666',
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
     fontWeight: '500',
     flex: 1,
   },
   infoValue: {
-    fontSize: 14,
-    color: '#333',
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[900],
     flex: 2,
     textAlign: 'right',
   },
   aiSummaryText: {
-    fontSize: 16,
-    color: '#333',
+    ...MaterialTypography.bodyLarge,
+    color: MaterialColors.neutral[800],
     lineHeight: 24,
     fontStyle: 'italic',
   },
   notesText: {
-    fontSize: 16,
-    color: '#333',
+    ...MaterialTypography.bodyLarge,
+    color: MaterialColors.neutral[800],
     lineHeight: 24,
   },
   statusGrid: {
@@ -473,29 +716,150 @@ const styles = StyleSheet.create({
   },
   statusOption: {
     width: '48%',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 8,
+    paddingVertical: MaterialSpacing.md,
+    paddingHorizontal: MaterialSpacing.md,
+    marginBottom: MaterialSpacing.sm,
+    borderRadius: MaterialShape.medium,
     borderWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: '#fff',
+    borderColor: MaterialColors.neutral[300],
+    backgroundColor: MaterialColors.surface,
     alignItems: 'center',
+    ...MaterialElevation.level1,
   },
   statusOptionActive: {
-    backgroundColor: '#2196F3',
-    borderColor: '#2196F3',
+    backgroundColor: MaterialColors.primary[500],
+    borderColor: MaterialColors.primary[500],
   },
   statusOptionText: {
-    fontSize: 14,
-    color: '#666',
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
     fontWeight: '500',
   },
   statusOptionTextActive: {
-    color: '#fff',
+    color: MaterialColors.onPrimary,
   },
   bottomSpacer: {
-    height: 32,
+    height: MaterialSpacing.xxxl,
+  },
+  scoringHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: MaterialSpacing.md,
+  },
+  scoreBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.sm,
+    borderRadius: MaterialShape.full,
+  },
+  scoreText: {
+    ...MaterialTypography.labelLarge,
+    color: MaterialColors.onPrimary,
+    fontWeight: '600',
+    marginLeft: MaterialSpacing.xs,
+  },
+  categoryText: {
+    ...MaterialTypography.labelSmall,
+    color: MaterialColors.onPrimary,
+    marginLeft: MaterialSpacing.sm,
+  },
+  subsectionTitle: {
+    ...MaterialTypography.titleSmall,
+    color: MaterialColors.neutral[800],
+    marginBottom: MaterialSpacing.sm,
+  },
+  scoringBreakdown: {
+    marginBottom: MaterialSpacing.lg,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: MaterialSpacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: MaterialColors.neutral[200],
+  },
+  breakdownLabel: {
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
+    fontWeight: '500',
+    flex: 1,
+  },
+  breakdownValue: {
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[900],
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'right',
+  },
+  overrideSection: {
+    marginBottom: MaterialSpacing.lg,
+  },
+  overrideInfo: {
+    backgroundColor: MaterialColors.neutral[50],
+    padding: MaterialSpacing.md,
+    borderRadius: MaterialShape.medium,
+    marginTop: MaterialSpacing.sm,
+  },
+  overrideText: {
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[900],
+    fontWeight: '600',
+  },
+  overrideReason: {
+    ...MaterialTypography.bodySmall,
+    color: MaterialColors.neutral[600],
+    marginTop: MaterialSpacing.xs,
+  },
+  overrideButton: {
+    backgroundColor: MaterialColors.primary[500],
+    paddingHorizontal: MaterialSpacing.lg,
+    paddingVertical: MaterialSpacing.sm,
+    borderRadius: MaterialShape.medium,
+    alignItems: 'center',
+    marginTop: MaterialSpacing.sm,
+  },
+  overrideButtonText: {
+    ...MaterialTypography.labelMedium,
+    color: MaterialColors.onPrimary,
+    fontWeight: '600',
+  },
+  historySection: {
+    marginBottom: MaterialSpacing.lg,
+  },
+  historyItem: {
+    backgroundColor: MaterialColors.neutral[50],
+    padding: MaterialSpacing.md,
+    borderRadius: MaterialShape.medium,
+    marginBottom: MaterialSpacing.sm,
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: MaterialSpacing.xs,
+  },
+  historyScore: {
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[900],
+    fontWeight: '600',
+  },
+  historyDate: {
+    ...MaterialTypography.bodySmall,
+    color: MaterialColors.neutral[600],
+  },
+  historyTrigger: {
+    ...MaterialTypography.bodySmall,
+    color: MaterialColors.neutral[500],
+    fontStyle: 'italic',
+  },
+  lastCalculated: {
+    ...MaterialTypography.bodySmall,
+    color: MaterialColors.neutral[500],
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: MaterialSpacing.sm,
   },
 });
 

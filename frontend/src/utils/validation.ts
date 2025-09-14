@@ -1,6 +1,7 @@
 // Enhanced validation utilities with task validation
 
 import { LoginForm, RegisterForm, LeadForm, TaskForm } from '../types';
+import { getValidationError } from './errorMessages';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -44,97 +45,107 @@ interface ValidationRule {
   validate: (value: any, allData?: Record<string, any>) => string | null;
 }
 
-// Common validation rules
+// Common validation rules with enhanced error messages
 export const rules = {
-  required: (message = 'This field is required'): ValidationRule => ({
+  required: (fieldName?: string): ValidationRule => ({
     validate: (value: any) => {
       if (value === null || value === undefined || value === '') {
-        return message;
+        const errorTemplate = getValidationError('required', { field: fieldName });
+        return errorTemplate.message;
       }
       return null;
     },
   }),
 
-  email: (message = 'Please enter a valid email address'): ValidationRule => ({
+  email: (): ValidationRule => ({
     validate: (value: string) => {
       if (value && !EMAIL_REGEX.test(value)) {
-        return message;
+        const errorTemplate = getValidationError('invalidEmail');
+        return errorTemplate.message;
       }
       return null;
     },
   }),
 
-  minLength: (min: number, message?: string): ValidationRule => ({
+  minLength: (min: number, fieldName?: string): ValidationRule => ({
     validate: (value: string) => {
       if (value && value.length < min) {
-        return message || `Must be at least ${min} characters long`;
+        const errorTemplate = getValidationError('passwordTooShort', { min });
+        return errorTemplate.message;
       }
       return null;
     },
   }),
 
-  maxLength: (max: number, message?: string): ValidationRule => ({
+  maxLength: (max: number, fieldName?: string): ValidationRule => ({
     validate: (value: string) => {
       if (value && value.length > max) {
-        return message || `Must be no more than ${max} characters long`;
+        const errorTemplate = getValidationError('maxLengthExceeded', { max, value });
+        return errorTemplate.message;
       }
       return null;
     },
   }),
 
-  phone: (message = 'Please enter a valid phone number'): ValidationRule => ({
+  phone: (): ValidationRule => ({
     validate: (value: string) => {
       if (value && !PHONE_REGEX.test(value)) {
-        return message;
+        const errorTemplate = getValidationError('invalidPhone');
+        return errorTemplate.message;
       }
       return null;
     },
   }),
 
-  numeric: (message = 'Please enter a valid number'): ValidationRule => ({
+  numeric: (): ValidationRule => ({
     validate: (value: string) => {
       if (value && (isNaN(Number(value)) || value.trim() === '')) {
-        return message;
+        const errorTemplate = getValidationError('invalidNumber');
+        return errorTemplate.message;
       }
       return null;
     },
   }),
 
-  positiveNumber: (message = 'Please enter a positive number'): ValidationRule => ({
+  positiveNumber: (): ValidationRule => ({
     validate: (value: string) => {
       if (value && (isNaN(Number(value)) || Number(value) <= 0)) {
-        return message;
+        const errorTemplate = getValidationError('invalidNumber');
+        return errorTemplate.message;
       }
       return null;
     },
   }),
 
-  match: (fieldName: string, message?: string): ValidationRule => ({
+  match: (fieldName: string): ValidationRule => ({
     validate: (value: string, allData: Record<string, any> = {}) => {
       if (value && allData[fieldName] && value !== allData[fieldName]) {
-        return message || `Must match ${fieldName}`;
+        const errorTemplate = getValidationError('passwordsDontMatch');
+        return errorTemplate.message;
       }
       return null;
     },
   }),
 
-  dateFormat: (message = 'Please enter a valid date (YYYY-MM-DD)'): ValidationRule => ({
+  dateFormat: (): ValidationRule => ({
     validate: (value: string) => {
       if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        return message;
+        const errorTemplate = getValidationError('invalidDate', { expectedFormat: 'YYYY-MM-DD' });
+        return errorTemplate.message;
       }
       return null;
     },
   }),
 
-  futureDate: (message = 'Date must be in the future'): ValidationRule => ({
+  futureDate: (): ValidationRule => ({
     validate: (value: string) => {
       if (value) {
         const inputDate = new Date(value);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         if (inputDate < today) {
-          return message;
+          const errorTemplate = getValidationError('futureDateRequired');
+          return errorTemplate.message;
         }
       }
       return null;
@@ -150,12 +161,12 @@ export const rules = {
 export const validateLoginForm = (data: LoginForm): ValidationResult => {
   return validate(data, {
     email: [
-      rules.required('Email address is required'),
-      rules.email('Please enter a valid email address')
+      rules.required('Email'),
+      rules.email()
     ],
     password: [
-      rules.required('Password is required'),
-      rules.minLength(1, 'Please enter your password')
+      rules.required('Password'),
+      rules.minLength(1, 'Password')
     ],
   });
 };

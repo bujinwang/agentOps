@@ -14,6 +14,8 @@ import {
 import { Task, TaskPriority } from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoadingState } from '../../utils/loadingState';
+import { TaskListSkeleton } from '../../components/common/SkeletonList';
 
 interface TasksScreenProps {
   navigation: any;
@@ -22,16 +24,16 @@ interface TasksScreenProps {
 const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed' | 'overdue'>('all');
 
+  // Enhanced loading state management
+  const initialLoadingState = useLoadingState();
+  const refreshLoadingState = useLoadingState();
+
   const loadTasks = useCallback(async (refresh = false) => {
-    if (refresh) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
+    const currentLoadingState = refresh ? refreshLoadingState : initialLoadingState;
+
+    currentLoadingState.startLoading(refresh ? 'Refreshing tasks...' : 'Loading tasks...');
 
     try {
       const params: any = {
@@ -50,15 +52,16 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
       }
 
       const response = await apiService.getTasks(params);
-      setTasks(response.data || []);
+
+      if (response) {
+        setTasks(response.data || []);
+        currentLoadingState.stopLoading();
+      }
     } catch (error) {
       console.error('Error loading tasks:', error);
-      Alert.alert('Error', 'Failed to load tasks');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      currentLoadingState.setError('Failed to load tasks');
     }
-  }, [filter]);
+  }, [filter, initialLoadingState, refreshLoadingState]);
 
   useEffect(() => {
     loadTasks();
@@ -78,9 +81,9 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
 
   const toggleTaskCompletion = async (taskId: number, currentStatus: boolean) => {
     try {
-      await apiService.updateTask(taskId, { 
-        is_completed: !currentStatus,
-        completed_at: !currentStatus ? new Date().toISOString() : undefined,
+      await apiService.updateTask(taskId, {
+        isCompleted: !currentStatus,
+        completedAt: !currentStatus ? new Date().toISOString() : undefined,
       });
       
       // Update local state
@@ -236,6 +239,28 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
 
   const filteredTasks = getFilteredTasks();
 
+  if (initialLoadingState.isLoading && tasks.length === 0) {
+    return (
+      <View style={styles.container}>
+        {/* Header skeleton */}
+        <View style={styles.header}>
+          <View style={{ height: 24, backgroundColor: '#e0e0e0', borderRadius: 4, marginBottom: 8, width: '60%' }} />
+          <View style={{ height: 16, backgroundColor: '#e0e0e0', borderRadius: 4, width: '40%' }} />
+        </View>
+
+        {/* Filter tabs skeleton */}
+        <View style={styles.filterContainer}>
+          {[1, 2, 3, 4].map(i => (
+            <View key={i} style={[styles.filterTab, { backgroundColor: '#e0e0e0' }]} />
+          ))}
+        </View>
+
+        {/* Tasks list skeleton */}
+        <TaskListSkeleton count={5} animated={true} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -256,9 +281,9 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
         renderItem={renderTaskItem}
         contentContainerStyle={styles.listContainer}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+          <RefreshControl refreshing={refreshLoadingState.isLoading} onRefresh={handleRefresh} />
         }
-        ListEmptyComponent={!isLoading ? renderEmptyState : null}
+        ListEmptyComponent={!initialLoadingState.isLoading ? renderEmptyState : null}
         showsVerticalScrollIndicator={false}
       />
 

@@ -18,19 +18,25 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { LoginForm } from '../../types';
 import { validateLoginForm, getErrorMessage, hasError } from '../../utils/validation';
+import { useLoadingState } from '../../utils/loadingState';
+import { apiService } from '../../services/api';
+import { getAuthError, getNetworkError, formatErrorForDisplay } from '../../utils/errorMessages';
 
 type LoginScreenProps = StackScreenProps<AuthStackParamList, 'Login'>;
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   console.log('LoginScreen: Component mounting/rendering');
-  
-  const { login, isLoading } = useAuth();
+
+  const { login, isLoading: authLoading } = useAuth();
+
+  // Enhanced loading state management
+  const loginLoadingState = useLoadingState();
+
   const [formData, setFormData] = useState<LoginForm>({
     email: '',
     password: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
   const handleInputChange = (field: keyof LoginForm, value: string) => {
@@ -50,38 +56,58 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     }
 
     try {
-      setIsSubmitting(true);
       setErrors({});
-      await login(formData);
+      loginLoadingState.startLoading('Signing in...');
+
+      // Use the new loginWithLoading method with callbacks
+      const result = await apiService.loginWithLoading(formData, {
+        onStart: loginLoadingState.startLoading,
+        onProgress: loginLoadingState.updateProgress,
+        onComplete: loginLoadingState.stopLoading,
+        onError: loginLoadingState.setError,
+      });
+
+      if (result) {
+        // If loginWithLoading succeeds, call the auth context login
+        await login(formData);
+        loginLoadingState.stopLoading();
+      }
     } catch (error) {
-      let errorMessage = 'Login failed. Please try again.';
-      let errorTitle = 'Login Error';
+      let errorTemplate;
 
       if (error instanceof Error) {
-        // Handle specific error types
-        if (error.message.includes('Invalid credentials')) {
-          errorMessage = 'The email or password you entered is incorrect. Please check your credentials and try again.';
-          errorTitle = 'Invalid Credentials';
+        // Handle specific error types with enhanced templates
+        if (error.message.includes('Invalid credentials') || error.message.includes('401')) {
+          errorTemplate = getAuthError('invalidCredentials');
         } else if (error.message.includes('Network error') || error.message.includes('timeout') || error.message.includes('AbortError')) {
-          errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
-          errorTitle = 'Connection Error';
-        } else if (error.message.includes('Rate limit') || error.message.includes('Too many')) {
-          errorMessage = 'Too many login attempts detected. Please wait a few minutes before trying again to protect your account security.';
-          errorTitle = 'Rate Limited';
-        } else if ((error as any).status === 429) {
-          errorMessage = 'Too many login attempts. Your account is temporarily locked for security. Please wait 15 minutes before trying again.';
-          errorTitle = 'Account Temporarily Locked';
+          errorTemplate = getNetworkError('timeout');
+        } else if (error.message.includes('Rate limit') || error.message.includes('Too many') || (error as any).status === 429) {
+          errorTemplate = getAuthError('accountLocked');
         } else if ((error as any).status >= 500) {
-          errorMessage = 'Server error occurred. Our team has been notified. Please try again later.';
-          errorTitle = 'Server Error';
+          errorTemplate = getNetworkError('serverError');
         } else {
-          errorMessage = error.message;
+          // Fallback to generic auth error
+          errorTemplate = getAuthError('invalidCredentials');
         }
+      } else {
+        // Fallback for non-Error instances
+        errorTemplate = getAuthError('invalidCredentials');
       }
 
-      Alert.alert(errorTitle, errorMessage);
-    } finally {
-      setIsSubmitting(false);
+      // Format error for alert display with help text
+      const formattedError = formatErrorForDisplay(errorTemplate, 'alert');
+
+      loginLoadingState.setError(formattedError.message);
+      Alert.alert(
+        formattedError.title,
+        `${formattedError.message}\n\n${formattedError.details || ''}`,
+        [
+          {
+            text: formattedError.action || 'Try Again',
+            style: 'default',
+          },
+        ]
+      );
     }
   };
 
@@ -118,7 +144,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                editable={!isSubmitting && !isLoading}
+                editable={!loginLoadingState.isLoading && !authLoading}
               />
               {hasError(errors, 'email') && (
                 <Text style={styles.errorText}>
@@ -139,7 +165,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                 placeholder="Enter your password"
                 secureTextEntry
                 autoCapitalize="none"
-                editable={!isSubmitting && !isLoading}
+                editable={!loginLoadingState.isLoading && !authLoading}
               />
               {hasError(errors, 'password') && (
                 <Text style={styles.errorText}>
@@ -153,7 +179,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               <TouchableOpacity
                 style={styles.checkbox}
                 onPress={() => setRememberMe(!rememberMe)}
-                disabled={isSubmitting || isLoading}
+                disabled={loginLoadingState.isLoading || authLoading}
               >
                 <View style={[styles.checkboxBox, rememberMe && styles.checkboxChecked]}>
                   {rememberMe && <Text style={styles.checkboxMark}>✓</Text>}
@@ -165,12 +191,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             <TouchableOpacity
               style={[
                 styles.loginButton,
-                (isSubmitting || isLoading) && styles.buttonDisabled,
+                (loginLoadingState.isLoading || authLoading) && styles.buttonDisabled,
               ]}
               onPress={handleLogin}
-              disabled={isSubmitting || isLoading}
+              disabled={loginLoadingState.isLoading || authLoading}
             >
-              {(isSubmitting || isLoading) ? (
+              {(loginLoadingState.isLoading || authLoading) ? (
                 <View style={styles.buttonContent}>
                   <ActivityIndicator size="small" color="#fff" />
                   <Text style={[styles.loginButtonText, styles.buttonTextWithSpinner]}>
@@ -185,7 +211,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             <TouchableOpacity
               style={styles.registerLink}
               onPress={navigateToRegister}
-              disabled={isSubmitting || isLoading}
+              disabled={loginLoadingState.isLoading || authLoading}
             >
               <Text style={styles.registerLinkText}>
                 Don't have an account? Sign up

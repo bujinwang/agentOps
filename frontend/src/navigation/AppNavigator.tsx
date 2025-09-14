@@ -16,6 +16,7 @@ import AddLeadScreen from '../screens/leads/AddLeadScreen';
 import EditLeadScreen from '../screens/leads/EditLeadScreen';
 import TasksScreen from '../screens/tasks/TasksScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import AnalyticsScreen from '../screens/analytics/AnalyticsScreen';
 import LoadingScreen from '../screens/LoadingScreen';
 
 // Import types
@@ -138,6 +139,22 @@ const MainNavigator = () => (
         tabBarIcon: ({ color, focused }) => (
           <NavigationIcon
             name="tasks"
+            color={color}
+            state={focused ? 'active' : 'default'}
+            size="navigation"
+          />
+        ),
+      }}
+    />
+    <Tab.Screen
+      name="Analytics"
+      component={AnalyticsScreen}
+      options={{
+        title: 'Analytics',
+        tabBarLabel: 'Analytics',
+        tabBarIcon: ({ color, focused }) => (
+          <NavigationIcon
+            name="analytics"
             color={color}
             state={focused ? 'active' : 'default'}
             size="navigation"

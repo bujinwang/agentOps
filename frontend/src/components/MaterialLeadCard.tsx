@@ -28,16 +28,21 @@ interface MaterialLeadCardProps {
     aiSummary?: string;
     status: string;
     priority: string;
+    score?: number;
+    scoreCategory?: 'High' | 'Medium' | 'Low';
+    scoreLastCalculated?: string;
     createdAt: string;
   };
   onPress: () => void;
   elevation?: number;
+  showScoreIndicator?: boolean;
 }
 
 const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
   lead,
   onPress,
   elevation = 1,
+  showScoreIndicator = true,
 }) => {
   const scaleValue = new Animated.Value(1);
 
@@ -80,6 +85,37 @@ const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
     return colors[priority as keyof typeof colors] || MaterialColors.neutral[500];
   };
 
+  const getScoreColor = (score?: number, category?: string): string => {
+    if (!score) return MaterialColors.neutral[400];
+
+    if (category === 'High') return MaterialColors.secondary[600];
+    if (category === 'Medium') return MaterialColors.warning[600];
+    if (category === 'Low') return MaterialColors.error[600];
+
+    // Fallback based on score value
+    if (score >= 80) return MaterialColors.secondary[600];
+    if (score >= 60) return MaterialColors.warning[600];
+    return MaterialColors.error[600];
+  };
+
+  const renderScoreIndicator = () => {
+    if (!showScoreIndicator || !lead.score) return null;
+
+    const scoreColor = getScoreColor(lead.score, lead.scoreCategory);
+
+    return (
+      <View style={[styles.scoreBadge, { backgroundColor: scoreColor }]}>
+        <BusinessIcon
+          name="star"
+          size={14}
+          color={MaterialColors.onPrimary}
+          state="active"
+        />
+        <Text style={styles.scoreText}>{lead.score}</Text>
+      </View>
+    );
+  };
+
   const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -103,7 +139,7 @@ const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
           getElevationStyle(elevation),
         ]}
       >
-        {/* Header with Name and Priority */}
+        {/* Header with Name, Priority, and Score */}
         <View style={styles.header}>
           <View style={styles.nameContainer}>
             <Text style={styles.name} numberOfLines={1}>
@@ -113,8 +149,11 @@ const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
               {lead.email}
             </Text>
           </View>
-          <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(lead.priority) }]}>
-            <Text style={styles.priorityText}>{lead.priority}</Text>
+          <View style={styles.badgesContainer}>
+            <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(lead.priority) }]}>
+              <Text style={styles.priorityText}>{lead.priority}</Text>
+            </View>
+            {renderScoreIndicator()}
           </View>
         </View>
 
@@ -195,6 +234,9 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: MaterialSpacing.sm,
   },
+  badgesContainer: {
+    alignItems: 'flex-end',
+  },
   name: {
     ...MaterialTypography.titleMedium,
     color: MaterialColors.neutral[900],
@@ -213,6 +255,20 @@ const styles = StyleSheet.create({
     ...MaterialTypography.labelSmall,
     color: MaterialColors.onPrimary,
     fontWeight: '600',
+  },
+  scoreBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: MaterialSpacing.sm,
+    paddingVertical: MaterialSpacing.xs,
+    borderRadius: 12,
+    marginTop: MaterialSpacing.xs,
+  },
+  scoreText: {
+    ...MaterialTypography.labelSmall,
+    color: MaterialColors.onPrimary,
+    fontWeight: '600',
+    marginLeft: MaterialSpacing.xs,
   },
   phone: {
     ...MaterialTypography.bodyMedium,

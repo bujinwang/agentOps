@@ -2,6 +2,7 @@ const express = require('express');
 const { body, query, param, validationResult } = require('express-validator');
 const Lead = require('../models/Lead');
 const Interaction = require('../models/Interaction');
+const workflowService = require('../services/WorkflowService');
 const { authenticate } = require('../middleware/auth');
 const { ERROR_MESSAGES, LEAD_STATUS, LEAD_PRIORITY, VALIDATION_RULES, INTERACTION_TYPES } = require('../config/constants');
 const { logger } = require('../config/logger');
@@ -330,6 +331,94 @@ router.put('/:id', authenticate, updateLeadValidation, handleValidationErrors, a
       error: 'Failed to update lead',
       message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
     });
+  }
+});
+
+// Update lead score with workflow trigger
+router.put('/:id/score', authenticate, [
+  param('id')
+    .isInt({ min: 1 })
+    .withMessage('Lead ID must be a positive integer')
+    .toInt(),
+  body('score')
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('Score must be between 0 and 100'),
+  body('reason')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('Reason must be less than 500 characters')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const leadId = parseInt(req.params.id);
+    const userId = req.user.user_id;
+    const newScore = parseFloat(req.body.score);
+    const reason = req.body.reason || 'Manual score update';
+
+    if (isNaN(leadId)) {
+      return sendError(res, 'Invalid lead ID', 'VALIDATION_ERROR', null, 400);
+    }
+
+    // Get current lead
+    const currentLead = await Lead.getById(leadId, userId);
+    if (!currentLead) {
+      return sendError(res, ERROR_MESSAGES.LEAD_NOT_FOUND, 'NOT_FOUND_ERROR', null, 404);
+    }
+
+    const oldScore = currentLead.score;
+
+    // Update the lead score
+    const updateData = {
+      score: newScore,
+      score_category: newScore >= 70 ? 'High' : newScore >= 40 ? 'Medium' : 'Low',
+      score_last_calculated: new Date().toISOString(),
+      manual_score_override: newScore,
+      manual_score_reason: reason,
+      // Update score history
+      score_history: [
+        ...(currentLead.score_history || []),
+        {
+          score: newScore,
+          category: newScore >= 70 ? 'High' : newScore >= 40 ? 'Medium' : 'Low',
+          calculatedAt: new Date().toISOString(),
+          breakdown: currentLead.score_breakdown || {
+            budget: 0, timeline: 0, propertyType: 0, location: 0, engagement: 0
+          },
+          trigger: 'manual'
+        }
+      ].slice(-10) // Keep last 10 entries
+    };
+
+    const updatedLead = await currentLead.update(updateData);
+
+    // Check for workflow triggers based on the new score
+    try {
+      const workflowResult = await workflowService.checkWorkflowTriggers(leadId, newScore, userId);
+      if (workflowResult.triggered) {
+        logger.info(`Workflows triggered for lead ${leadId}: ${workflowResult.workflows.length} workflows`);
+      }
+    } catch (workflowError) {
+      logger.error('Error checking workflow triggers:', workflowError);
+      // Don't fail the request if workflow trigger fails
+    }
+
+    // Log score change interaction
+    try {
+      await Interaction.create({
+        userId,
+        leadId,
+        type: INTERACTION_TYPES.STATUS_CHANGE, // Reuse status change type
+        content: `Score updated from ${oldScore} to ${newScore}: ${reason}`
+      });
+    } catch (interactionError) {
+      logger.warn('Failed to log score change interaction:', interactionError);
+    }
+
+    logger.info(`Lead score updated: ${leadId} from ${oldScore} to ${newScore} by user ${userId}`);
+
+    sendResponse(res, updatedLead.toJSON(), 'Lead score updated successfully');
+  } catch (error) {
+    logger.error('Error updating lead score:', error);
+    sendError(res, ERROR_MESSAGES.INTERNAL_SERVER_ERROR, 'INTERNAL_SERVER_ERROR', null, 500);
   }
 });
 

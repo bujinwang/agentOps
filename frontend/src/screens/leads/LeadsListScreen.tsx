@@ -1,4 +1,4 @@
-// Leads list screen with Material Design BMAD principles
+// Leads list screen with enhanced Material Design BMAD principles
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -20,11 +20,14 @@ import { apiService } from '../../services/api';
 import { formatCurrency } from '../../utils/validation';
 import MaterialLeadCard from '../../components/MaterialLeadCard';
 import MaterialFAB from '../../components/MaterialFAB';
-import { 
-  MaterialColors, 
-  MaterialElevation, 
-  MaterialSpacing, 
-  MaterialTypography 
+import { BusinessIcon } from '../../components/MaterialIcon';
+import { LeadListSkeleton } from '../../components/common/SkeletonList';
+import { useLoadingState } from '../../utils/loadingState';
+import {
+  MaterialColors,
+  MaterialElevation,
+  MaterialSpacing,
+  MaterialTypography
 } from '../../styles/MaterialDesign';
 
 interface LeadsListScreenProps {
@@ -33,25 +36,88 @@ interface LeadsListScreenProps {
 
 const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<LeadStatus | undefined>();
   const [selectedPriority, setSelectedPriority] = useState<LeadPriority | undefined>();
+  const [selectedScoreCategory, setSelectedScoreCategory] = useState<'High' | 'Medium' | 'Low' | undefined>();
+  const [sortBy, setSortBy] = useState<'created_at' | 'score' | 'priority'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+
+  // Enhanced loading state management
+  const loadingState = useLoadingState();
+  const refreshLoadingState = useLoadingState();
+
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <View style={styles.headerContent}>
+        <View style={styles.titleContainer}>
+          <BusinessIcon
+            name="people"
+            size={24}
+            color={MaterialColors.primary[600]}
+            state="active"
+          />
+          <Text style={styles.headerTitle}>Leads</Text>
+        </View>
+        <View style={styles.statsContainer}>
+          <Text style={styles.statsText}>
+            {leads.length} {leads.length === 1 ? 'lead' : 'leads'}
+            {(selectedStatus || selectedPriority || selectedScoreCategory || searchTerm) && (
+              <Text style={styles.filteredText}> (filtered)</Text>
+            )}
+          </Text>
+          <TouchableOpacity
+            style={styles.sortButton}
+            onPress={() => {
+              const sortOptions = [
+                { label: 'Newest First', value: 'created_at', order: 'DESC' },
+                { label: 'Oldest First', value: 'created_at', order: 'ASC' },
+                { label: 'Highest Score', value: 'score', order: 'DESC' },
+                { label: 'Lowest Score', value: 'score', order: 'ASC' },
+                { label: 'Highest Priority', value: 'priority', order: 'DESC' },
+                { label: 'Lowest Priority', value: 'priority', order: 'ASC' },
+              ];
+              // For now, cycle through sort options
+              const currentIndex = sortOptions.findIndex(
+                option => option.value === sortBy && option.order === sortOrder
+              );
+              const nextIndex = (currentIndex + 1) % sortOptions.length;
+              const nextOption = sortOptions[nextIndex];
+              setSortBy(nextOption.value as any);
+              setSortOrder(nextOption.order as any);
+            }}
+          >
+            <BusinessIcon
+              name="sort"
+              size={20}
+              color={MaterialColors.primary[600]}
+              state="active"
+            />
+            <Text style={styles.sortButtonText}>
+              {sortBy === 'created_at' && sortOrder === 'DESC' && 'Newest'}
+              {sortBy === 'created_at' && sortOrder === 'ASC' && 'Oldest'}
+              {sortBy === 'score' && sortOrder === 'DESC' && 'High Score'}
+              {sortBy === 'score' && sortOrder === 'ASC' && 'Low Score'}
+              {sortBy === 'priority' && sortOrder === 'DESC' && 'High Priority'}
+              {sortBy === 'priority' && sortOrder === 'ASC' && 'Low Priority'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
 
   const loadLeads = useCallback(async (refresh = false) => {
-    if (refresh) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
+    const currentLoadingState = refresh ? refreshLoadingState : loadingState;
+
+    currentLoadingState.startLoading(refresh ? 'Refreshing leads...' : 'Loading leads...');
 
     try {
       const params: Partial<LeadListParams> = {
         page: 1,
         limit: 50,
-        sortBy: 'created_at',
-        sortOrder: 'DESC',
+        sortBy: sortBy,
+        sortOrder: sortOrder,
       };
 
       if (searchTerm.trim()) {
@@ -66,16 +132,27 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
         params.priority = selectedPriority;
       }
 
-      const response = await apiService.getLeads(params);
-      setLeads(response.data);
+      if (selectedScoreCategory) {
+        params.scoreCategory = selectedScoreCategory;
+      }
+
+      const response = await apiService.getLeadsWithLoading(params, {
+        onStart: currentLoadingState.startLoading,
+        onProgress: currentLoadingState.updateProgress,
+        onComplete: currentLoadingState.stopLoading,
+        onError: currentLoadingState.setError,
+      });
+
+      if (response) {
+        setLeads(response.data);
+        currentLoadingState.stopLoading();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load leads';
+      currentLoadingState.setError(message);
       Alert.alert('Error', message);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
     }
-  }, [searchTerm, selectedStatus, selectedPriority]);
+  }, [searchTerm, selectedStatus, selectedPriority, selectedScoreCategory, sortBy, sortOrder, loadingState, refreshLoadingState]);
 
   useEffect(() => {
     loadLeads();
@@ -104,6 +181,7 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
   const clearFilters = () => {
     setSelectedStatus(undefined);
     setSelectedPriority(undefined);
+    setSelectedScoreCategory(undefined);
     setSearchTerm('');
   };
 
@@ -117,20 +195,44 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyStateTitle}>No Leads Found</Text>
+      <View style={styles.emptyStateIcon}>
+        <BusinessIcon
+          name={searchTerm || selectedStatus || selectedPriority || selectedScoreCategory ? "search_off" : "people_outline"}
+          size={48}
+          color={MaterialColors.neutral[400]}
+          state="inactive"
+        />
+      </View>
+      <Text style={styles.emptyStateTitle}>
+        {searchTerm || selectedStatus || selectedPriority || selectedScoreCategory ? 'No Matching Leads' : 'No Leads Yet'}
+      </Text>
       <Text style={styles.emptyStateText}>
-        {searchTerm || selectedStatus || selectedPriority
-          ? 'Try adjusting your filters or search terms'
-          : 'Get started by adding your first lead'}
+        {searchTerm || selectedStatus || selectedPriority || selectedScoreCategory
+          ? 'Try adjusting your filters, search terms, or score categories to find what you\'re looking for'
+          : 'Start building your lead database by adding your first lead'}
       </Text>
       <TouchableOpacity style={styles.addButton} onPress={navigateToAddLead}>
-        <Text style={styles.addButtonText}>Add Your First Lead</Text>
+        <BusinessIcon
+          name="add"
+          size={20}
+          color={MaterialColors.onSecondary}
+          state="active"
+        />
+        <Text style={styles.addButtonText}>
+          {searchTerm || selectedStatus || selectedPriority || selectedScoreCategory ? 'Add New Lead' : 'Add Your First Lead'}
+        </Text>
       </TouchableOpacity>
     </View>
   );
 
   const renderSearchBar = () => (
     <View style={styles.searchContainer}>
+      <BusinessIcon
+        name="search"
+        size={20}
+        color={MaterialColors.neutral[500]}
+        state="inactive"
+      />
       <TextInput
         style={styles.searchInput}
         placeholder="Search leads by name, email, or location..."
@@ -140,17 +242,52 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
         autoCapitalize="none"
         autoCorrect={false}
       />
+      {searchTerm ? (
+        <TouchableOpacity
+          onPress={() => setSearchTerm('')}
+          style={styles.searchClearButton}
+        >
+          <BusinessIcon
+            name="clear"
+            size={18}
+            color={MaterialColors.neutral[500]}
+            state="active"
+          />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 
   const renderFilterChips = () => {
     const statusOptions: LeadStatus[] = ['New', 'Contacted', 'Qualified', 'Showing Scheduled', 'Offer Made', 'Closed Won'];
     const priorityOptions: LeadPriority[] = ['High', 'Medium', 'Low'];
+    const scoreCategoryOptions: ('High' | 'Medium' | 'Low')[] = ['High', 'Medium', 'Low'];
+
+    const getStatusIcon = (status: LeadStatus): string => {
+      const icons = {
+        'New': 'fiber_new',
+        'Contacted': 'phone',
+        'Qualified': 'check_circle',
+        'Showing Scheduled': 'schedule',
+        'Offer Made': 'local_offer',
+        'Closed Won': 'celebration',
+      };
+      return icons[status] || 'help';
+    };
+
+    const getPriorityIcon = (priority: LeadPriority): string => {
+      const icons = {
+        'High': 'priority_high',
+        'Medium': 'remove',
+        'Low': 'arrow_downward',
+      };
+      return icons[priority] || 'help';
+    };
 
     return (
       <View style={styles.filterContainer}>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterScroll}
         >
@@ -165,6 +302,12 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
               ]}
               onPress={() => setSelectedStatus(selectedStatus === status ? undefined : status)}
             >
+              <BusinessIcon
+                name={getStatusIcon(status)}
+                size={16}
+                color={selectedStatus === status ? MaterialColors.onPrimary : MaterialColors.neutral[600]}
+                state={selectedStatus === status ? "active" : "inactive"}
+              />
               <Text style={[
                 styles.filterChipText,
                 selectedStatus === status && styles.filterChipTextActive
@@ -173,7 +316,7 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
               </Text>
             </TouchableOpacity>
           ))}
-          
+
           {/* Priority Chips */}
           {priorityOptions.map(priority => (
             <TouchableOpacity
@@ -185,6 +328,12 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
               ]}
               onPress={() => setSelectedPriority(selectedPriority === priority ? undefined : priority)}
             >
+              <BusinessIcon
+                name={getPriorityIcon(priority)}
+                size={16}
+                color={selectedPriority === priority ? MaterialColors.onSecondary : MaterialColors.neutral[600]}
+                state={selectedPriority === priority ? "active" : "inactive"}
+              />
               <Text style={[
                 styles.filterChipText,
                 selectedPriority === priority && styles.filterChipTextActive
@@ -193,15 +342,47 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
               </Text>
             </TouchableOpacity>
           ))}
-          
+
+          {/* Score Category Chips */}
+          {scoreCategoryOptions.map(category => (
+            <TouchableOpacity
+              key={category}
+              style={[
+                styles.filterChip,
+                selectedScoreCategory === category && styles.filterChipActive,
+                { backgroundColor: selectedScoreCategory === category ? MaterialColors.primary[500] : MaterialColors.neutral[100] }
+              ]}
+              onPress={() => setSelectedScoreCategory(selectedScoreCategory === category ? undefined : category)}
+            >
+              <BusinessIcon
+                name="star"
+                size={16}
+                color={selectedScoreCategory === category ? MaterialColors.onPrimary : MaterialColors.neutral[600]}
+                state={selectedScoreCategory === category ? "active" : "inactive"}
+              />
+              <Text style={[
+                styles.filterChipText,
+                selectedScoreCategory === category && styles.filterChipTextActive
+              ]}>
+                {category} Score
+              </Text>
+            </TouchableOpacity>
+          ))}
+
           {/* Clear Filters Button */}
-          {(selectedStatus || selectedPriority || searchTerm) && (
+          {(selectedStatus || selectedPriority || selectedScoreCategory || searchTerm) && (
             <TouchableOpacity
               style={[styles.clearButton, { backgroundColor: MaterialColors.error[100] }]}
               onPress={clearFilters}
             >
+              <BusinessIcon
+                name="clear_all"
+                size={16}
+                color={MaterialColors.error[700]}
+                state="active"
+              />
               <Text style={[styles.clearButtonText, { color: MaterialColors.error[700] }]}>
-                Clear Filters
+                Clear
               </Text>
             </TouchableOpacity>
           )}
@@ -210,20 +391,25 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
     );
   };
 
-  if (isLoading && leads.length === 0) {
+  if (loadingState.isLoading && leads.length === 0) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={MaterialColors.primary[500]} />
-        <Text style={styles.loadingText}>Loading leads...</Text>
+      <SafeAreaView style={styles.container}>
+        {renderHeader()}
+        {renderSearchBar()}
+        {renderFilterChips()}
+        <LeadListSkeleton count={5} animated={true} />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header with Title and Stats */}
+      {renderHeader()}
+
       {/* Search Bar */}
       {renderSearchBar()}
-      
+
       {/* Filter Chips */}
       {renderFilterChips()}
 
@@ -234,9 +420,9 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
         renderItem={renderLeadItem}
         contentContainerStyle={styles.listContainer}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+          <RefreshControl refreshing={refreshLoadingState.isLoading} onRefresh={handleRefresh} />
         }
-        ListEmptyComponent={!isLoading ? renderEmptyState : null}
+        ListEmptyComponent={!loadingState.isLoading ? renderEmptyState : null}
         showsVerticalScrollIndicator={false}
       />
 
@@ -270,18 +456,27 @@ const styles = StyleSheet.create({
     color: MaterialColors.neutral[600],
   },
   searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: MaterialSpacing.md,
     paddingVertical: MaterialSpacing.md,
     backgroundColor: MaterialColors.surface,
     ...MaterialElevation.level1,
+    marginHorizontal: MaterialSpacing.sm,
+    marginBottom: MaterialSpacing.sm,
+    borderRadius: 12,
   },
   searchInput: {
+    flex: 1,
     ...MaterialTypography.bodyLarge,
-    backgroundColor: MaterialColors.neutral[100],
-    borderRadius: 12,
-    paddingHorizontal: MaterialSpacing.md,
+    backgroundColor: 'transparent',
+    paddingHorizontal: MaterialSpacing.sm,
     paddingVertical: MaterialSpacing.sm,
     color: MaterialColors.neutral[900],
+  },
+  searchClearButton: {
+    padding: MaterialSpacing.xs,
+    marginLeft: MaterialSpacing.xs,
   },
   filterContainer: {
     paddingHorizontal: MaterialSpacing.md,
@@ -294,6 +489,8 @@ const styles = StyleSheet.create({
     paddingVertical: MaterialSpacing.xs,
   },
   filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: MaterialSpacing.md,
     paddingVertical: MaterialSpacing.sm,
     borderRadius: 16,
@@ -306,6 +503,7 @@ const styles = StyleSheet.create({
   filterChipText: {
     ...MaterialTypography.labelMedium,
     color: MaterialColors.neutral[700],
+    marginLeft: MaterialSpacing.xs,
   },
   filterChipTextActive: {
     color: MaterialColors.onPrimary,
@@ -329,6 +527,12 @@ const styles = StyleSheet.create({
     paddingVertical: 64,
     paddingHorizontal: 32,
   },
+  emptyStateIcon: {
+    marginBottom: MaterialSpacing.lg,
+    padding: MaterialSpacing.lg,
+    backgroundColor: MaterialColors.neutral[100],
+    borderRadius: 48,
+  },
   emptyStateTitle: {
     ...MaterialTypography.headlineSmall,
     color: MaterialColors.neutral[800],
@@ -342,6 +546,8 @@ const styles = StyleSheet.create({
     marginBottom: MaterialSpacing.xl,
   },
   addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: MaterialColors.secondary[500],
     paddingHorizontal: MaterialSpacing.xl,
     paddingVertical: MaterialSpacing.md,
@@ -352,6 +558,56 @@ const styles = StyleSheet.create({
     ...MaterialTypography.labelLarge,
     color: MaterialColors.onSecondary,
     fontWeight: '600',
+    marginLeft: MaterialSpacing.sm,
+  },
+  header: {
+    backgroundColor: MaterialColors.surface,
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.lg,
+    ...MaterialElevation.level2,
+    marginBottom: MaterialSpacing.sm,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    ...MaterialTypography.headlineSmall,
+    color: MaterialColors.neutral[900],
+    marginLeft: MaterialSpacing.sm,
+    fontWeight: '600',
+  },
+  statsContainer: {
+    alignItems: 'flex-end',
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: MaterialSpacing.sm,
+    paddingVertical: MaterialSpacing.xs,
+    backgroundColor: MaterialColors.neutral[100],
+    borderRadius: 16,
+    marginTop: MaterialSpacing.xs,
+  },
+  sortButtonText: {
+    ...MaterialTypography.labelSmall,
+    color: MaterialColors.primary[600],
+    fontWeight: '600',
+    marginLeft: MaterialSpacing.xs,
+  },
+  statsText: {
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
+  },
+  filteredText: {
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.primary[600],
+    fontWeight: '500',
   },
 });
 

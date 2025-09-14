@@ -6,12 +6,13 @@ import {
   Animated,
   View,
 } from 'react-native';
-import { 
-  MaterialColors, 
-  MaterialElevation, 
-  MaterialSpacing 
+import {
+  MaterialColors,
+  MaterialElevation,
+  MaterialSpacing
 } from '../styles/MaterialDesign';
 import MaterialIcon from './MaterialIcon';
+import { useResponsive } from '../hooks/useResponsive';
 
 interface MaterialFABProps {
   icon: string;
@@ -36,6 +37,13 @@ const MaterialFAB: React.FC<MaterialFABProps> = ({
 }) => {
   const scaleValue = new Animated.Value(visible ? 1 : 0);
   const translateY = new Animated.Value(visible ? 0 : 100);
+
+  // Responsive utilities
+  const { deviceType, getResponsiveSpacing, getTouchTargetSize, getResponsiveFontSize } = useResponsive();
+
+  // Responsive dimensions
+  const responsiveSpacing = getResponsiveSpacing(MaterialSpacing.md);
+  const touchTargetSize = getTouchTargetSize(44);
 
   React.useEffect(() => {
     if (visible) {
@@ -94,37 +102,41 @@ const MaterialFAB: React.FC<MaterialFABProps> = ({
         height: 40,
         borderRadius: 20,
         fontSize: 20,
+        iconSize: 20,
       },
       medium: {
         width: 56,
         height: 56,
         borderRadius: 28,
         fontSize: 24,
+        iconSize: 24,
       },
       large: {
         width: 72,
         height: 72,
         borderRadius: 36,
         fontSize: 32,
+        iconSize: 28,
       },
     };
     return sizes[size];
   };
 
   const getPositionStyle = () => {
+    const baseSpacing = responsiveSpacing;
     const positions = {
       'bottom-right': {
-        right: MaterialSpacing.md,
-        bottom: MaterialSpacing.md,
+        right: baseSpacing,
+        bottom: baseSpacing,
       },
       'bottom-center': {
         left: '50%' as any,
-        bottom: MaterialSpacing.md,
-        transform: [{ translateX: -28 }],
+        bottom: baseSpacing,
+        transform: [{ translateX: -sizeStyles.width / 2 }],
       },
       'bottom-left': {
-        left: MaterialSpacing.md,
-        bottom: MaterialSpacing.md,
+        left: baseSpacing,
+        bottom: baseSpacing,
       },
     };
     return positions[position];
@@ -142,10 +154,12 @@ const MaterialFAB: React.FC<MaterialFABProps> = ({
       style={[
         styles.fab,
         {
-          width: sizeStyles.width,
-          height: sizeStyles.height,
+          width: Math.max(sizeStyles.width, touchTargetSize),
+          height: Math.max(sizeStyles.height, touchTargetSize),
           borderRadius: sizeStyles.borderRadius,
           backgroundColor: color,
+          minWidth: touchTargetSize,
+          minHeight: touchTargetSize,
         },
         positionStyle,
         extended && styles.extendedFab,
@@ -167,7 +181,7 @@ const MaterialFAB: React.FC<MaterialFABProps> = ({
           color={MaterialColors.onPrimary}
         />
         {extended && label && (
-          <Text style={styles.fabLabel}>{label}</Text>
+          <Text style={[styles.fabLabel, { fontSize: getResponsiveFontSize(14) }]}>{label}</Text>
         )}
       </Animated.View>
     </TouchableOpacity>

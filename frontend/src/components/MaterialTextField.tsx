@@ -8,13 +8,14 @@ import {
   Animated,
   Platform,
 } from 'react-native';
-import { 
-  MaterialColors, 
-  MaterialSpacing, 
+import {
+  MaterialColors,
+  MaterialSpacing,
   MaterialTypography,
-  MaterialShape 
+  MaterialShape
 } from '../styles/MaterialDesign';
 import { ActionIcon } from './MaterialIcon';
+import { useResponsive } from '../hooks/useResponsive';
 
 interface MaterialTextFieldProps {
   label: string;
@@ -64,6 +65,22 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const labelAnimation = useRef(new Animated.Value(value ? 1 : 0)).current;
   const borderAnimation = useRef(new Animated.Value(error ? 1 : 0)).current;
+
+  // Responsive utilities
+  const {
+    deviceType,
+    getResponsiveSpacing,
+    getTouchTargetSize,
+    getResponsiveFontSize,
+  } = useResponsive();
+
+  // Responsive dimensions
+  const responsiveSpacing = getResponsiveSpacing(MaterialSpacing.sm);
+  const responsiveLabelSize = getResponsiveFontSize(14); // labelMedium base
+  const responsiveBodySize = getResponsiveFontSize(16); // bodyLarge base
+  const responsiveHelperSize = getResponsiveFontSize(12); // bodySmall base
+  const touchTargetSize = getTouchTargetSize(44); // Minimum touch target
+  const iconSize = deviceType === 'desktop' ? 24 : deviceType === 'tablet' ? 22 : 20;
 
   React.useEffect(() => {
     Animated.timing(labelAnimation, {
@@ -122,7 +139,7 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
           outputRange: [1, 0.85],
         }),
       },
-    ],
+    ] as any,
   };
 
   const borderStyle = {
@@ -133,21 +150,23 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
   };
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, { marginVertical: responsiveSpacing }, style]}>
       <View style={[
         styles.inputContainer,
         {
           backgroundColor: getBackgroundColor(),
           borderColor: getBorderColor(),
+          minHeight: touchTargetSize,
+          paddingHorizontal: responsiveSpacing,
         },
         multiline && styles.multilineContainer,
       ]}>
         {/* Left Icon */}
         {leftIcon && (
-          <View style={styles.leftIconContainer}>
+          <View style={[styles.leftIconContainer, { top: responsiveSpacing }]}>
             <ActionIcon
               name={leftIcon}
-              size={20}
+              size={iconSize}
               color={getLabelColor()}
               state={error ? 'error' : disabled ? 'disabled' : 'default'}
             />
@@ -160,6 +179,7 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
             styles.label,
             {
               color: getLabelColor(),
+              fontSize: responsiveLabelSize,
             },
             labelStyle,
           ]}
@@ -173,8 +193,11 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
             styles.input,
             {
               color: disabled ? MaterialColors.neutral[500] : MaterialColors.neutral[900],
-              paddingLeft: leftIcon ? 40 : 16,
-              paddingRight: rightIcon ? 40 : 16,
+              fontSize: responsiveBodySize,
+              paddingLeft: leftIcon ? responsiveSpacing * 2.5 : responsiveSpacing,
+              paddingRight: rightIcon ? responsiveSpacing * 2.5 : responsiveSpacing,
+              paddingVertical: responsiveSpacing,
+              minHeight: touchTargetSize,
             },
             multiline && styles.multilineInput,
           ]}
@@ -197,13 +220,17 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
         {/* Right Icon */}
         {rightIcon && (
           <TouchableOpacity
-            style={styles.rightIconContainer}
+            style={[styles.rightIconContainer, {
+              top: responsiveSpacing,
+              minWidth: touchTargetSize,
+              minHeight: touchTargetSize,
+            }]}
             onPress={onRightIconPress}
             disabled={!onRightIconPress}
           >
             <ActionIcon
               name={rightIcon}
-              size={20}
+              size={iconSize}
               color={getLabelColor()}
               state={error ? 'error' : disabled ? 'disabled' : onRightIconPress ? 'active' : 'default'}
               onPress={onRightIconPress}
@@ -216,7 +243,12 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
       {(helperText || (error && errorText)) && (
         <Text style={[
           styles.helperText,
-          { color: error ? MaterialColors.error[500] : MaterialColors.neutral[600] }
+          {
+            color: error ? MaterialColors.error[500] : MaterialColors.neutral[600],
+            fontSize: responsiveHelperSize,
+            marginTop: responsiveSpacing * 0.5,
+            marginLeft: responsiveSpacing * 0.5,
+          }
         ]}>
           {error && errorText ? errorText : helperText}
         </Text>
@@ -227,59 +259,46 @@ const MaterialTextField: React.FC<MaterialTextFieldProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: MaterialSpacing.sm,
+    // marginVertical is now applied responsively in the component
   },
   inputContainer: {
     position: 'relative',
     borderRadius: MaterialShape.small,
     borderWidth: 1,
-    minHeight: 56,
     justifyContent: 'center',
+    // minHeight, paddingHorizontal are now applied responsively
   },
   multilineContainer: {
-    minHeight: 80,
-    paddingTop: 12,
+    // minHeight, paddingTop are now applied responsively
   },
   label: {
     position: 'absolute',
-    left: 16,
+    left: 0, // Will be overridden by responsive padding
     ...MaterialTypography.labelMedium,
     backgroundColor: 'transparent',
     zIndex: 1,
   },
   input: {
     ...MaterialTypography.bodyLarge,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    minHeight: 56,
+    // All padding and sizing is now applied responsively
   },
   multilineInput: {
-    paddingTop: 20,
-    paddingBottom: 16,
     textAlignVertical: 'top',
+    // paddingTop, paddingBottom are now applied responsively
   },
   leftIconContainer: {
     position: 'absolute',
-    left: 12,
-    top: 16,
+    left: 0, // Will be overridden by responsive positioning
     zIndex: 1,
-  },
-  leftIcon: {
-    fontSize: 20,
   },
   rightIconContainer: {
     position: 'absolute',
-    right: 12,
-    top: 16,
+    right: 0, // Will be overridden by responsive positioning
     zIndex: 1,
-  },
-  rightIcon: {
-    fontSize: 20,
   },
   helperText: {
     ...MaterialTypography.bodySmall,
-    marginTop: MaterialSpacing.xs,
-    marginLeft: MaterialSpacing.xs,
+    // All margins and fontSize are now applied responsively
   },
 });
 

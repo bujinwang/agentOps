@@ -7,12 +7,13 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { 
-  MaterialColors, 
-  MaterialElevation, 
-  MaterialSpacing, 
-  MaterialTypography 
+import {
+  MaterialColors,
+  MaterialElevation,
+  MaterialSpacing,
+  MaterialTypography
 } from '../styles/MaterialDesign';
+import { useResponsive } from '../hooks/useResponsive';
 
 interface MaterialSnackbarProps {
   message: string;
@@ -36,6 +37,15 @@ const MaterialSnackbar: React.FC<MaterialSnackbarProps> = ({
 }) => {
   const slideAnim = useRef(new Animated.Value(position === 'bottom' ? 100 : -100)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  // Responsive utilities
+  const { deviceType, getResponsiveSpacing, getResponsiveFontSize, getTouchTargetSize } = useResponsive();
+
+  // Responsive dimensions
+  const responsiveSpacing = getResponsiveSpacing(MaterialSpacing.md);
+  const responsiveMessageSize = getResponsiveFontSize(14); // bodyMedium base
+  const responsiveActionSize = getResponsiveFontSize(14); // labelMedium base
+  const touchTargetSize = getTouchTargetSize(44);
 
   useEffect(() => {
     // Animate in
@@ -108,22 +118,46 @@ const MaterialSnackbar: React.FC<MaterialSnackbarProps> = ({
           backgroundColor: getBackgroundColor(),
           transform: [{ translateY: slideAnim }],
           opacity: opacityAnim,
+          left: responsiveSpacing,
+          right: responsiveSpacing,
+          paddingHorizontal: responsiveSpacing,
+          paddingVertical: getResponsiveSpacing(MaterialSpacing.sm),
+          minHeight: touchTargetSize,
         },
         position === 'top' ? styles.topPosition : styles.bottomPosition,
       ]}
     >
       <View style={styles.content}>
-        <Text style={[styles.message, { color: MaterialColors.onPrimary }]} numberOfLines={2}>
+        <Text
+          style={[
+            styles.message,
+            {
+              color: MaterialColors.onPrimary,
+              fontSize: responsiveMessageSize,
+              marginRight: getResponsiveSpacing(MaterialSpacing.sm),
+            }
+          ]}
+          numberOfLines={2}
+        >
           {message}
         </Text>
 
         {action && (
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[
+              styles.actionButton,
+              {
+                paddingHorizontal: responsiveSpacing,
+                paddingVertical: getResponsiveSpacing(MaterialSpacing.xs),
+                marginLeft: getResponsiveSpacing(MaterialSpacing.sm),
+                minWidth: touchTargetSize,
+                minHeight: touchTargetSize,
+              }
+            ]}
             onPress={handleActionPress}
             activeOpacity={0.8}
           >
-            <Text style={[styles.actionText, { color: getActionColor() }]}>
+            <Text style={[styles.actionText, { color: getActionColor(), fontSize: responsiveActionSize }]}>
               {action.label}
             </Text>
           </TouchableOpacity>
@@ -131,11 +165,20 @@ const MaterialSnackbar: React.FC<MaterialSnackbarProps> = ({
 
         {!action && (
           <TouchableOpacity
-            style={styles.dismissButton}
+            style={[
+              styles.dismissButton,
+              {
+                paddingHorizontal: getResponsiveSpacing(MaterialSpacing.sm),
+                paddingVertical: getResponsiveSpacing(MaterialSpacing.xs),
+                marginLeft: getResponsiveSpacing(MaterialSpacing.sm),
+                minWidth: touchTargetSize,
+                minHeight: touchTargetSize,
+              }
+            ]}
             onPress={handleDismiss}
             activeOpacity={0.8}
           >
-            <Text style={[styles.dismissText, { color: MaterialColors.onPrimary }]}>✕</Text>
+            <Text style={[styles.dismissText, { color: MaterialColors.onPrimary, fontSize: responsiveActionSize }]}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -146,18 +189,14 @@ const MaterialSnackbar: React.FC<MaterialSnackbarProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: MaterialSpacing.md,
-    right: MaterialSpacing.md,
-    minHeight: 48,
     borderRadius: 8,
-    paddingHorizontal: MaterialSpacing.md,
-    paddingVertical: MaterialSpacing.sm,
-    ...MaterialElevation.level6,
+    ...MaterialElevation.level4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+    // All positioning and sizing is now applied responsively
   },
   topPosition: {
     top: 60,
@@ -173,26 +212,22 @@ const styles = StyleSheet.create({
   message: {
     ...MaterialTypography.bodyMedium,
     flex: 1,
-    marginRight: MaterialSpacing.sm,
+    // marginRight is now applied responsively
   },
   actionButton: {
-    paddingHorizontal: MaterialSpacing.md,
-    paddingVertical: MaterialSpacing.xs,
-    marginLeft: MaterialSpacing.sm,
     borderRadius: 4,
+    // All padding and sizing is now applied responsively
   },
   actionText: {
     ...MaterialTypography.labelMedium,
     fontWeight: '600',
   },
   dismissButton: {
-    paddingHorizontal: MaterialSpacing.sm,
-    paddingVertical: MaterialSpacing.xs,
-    marginLeft: MaterialSpacing.sm,
+    // All padding and sizing is now applied responsively
   },
   dismissText: {
-    fontSize: 16,
     fontWeight: '600',
+    // fontSize is now applied responsively
   },
 });
 

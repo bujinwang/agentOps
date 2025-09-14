@@ -14,6 +14,7 @@ import {
 } from '../styles/MaterialDesign';
 import { NavigationIcon } from './MaterialIcon';
 import { useResponsive } from '../hooks/useResponsive';
+import { useAccessibility } from '../hooks/useAccessibility';
 
 interface MaterialAppBarProps {
   title: string;
@@ -44,6 +45,13 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
     isLandscape,
   } = useResponsive();
 
+  const {
+    screenReaderEnabled,
+    generateAccessibilityLabel,
+    generateAccessibilityHint,
+    announceNavigation,
+  } = useAccessibility();
+
   // Responsive dimensions
   const appBarHeight = deviceType === 'desktop' ? 64 : deviceType === 'tablet' ? 60 : 56;
   const contentHeight = deviceType === 'desktop' ? 56 : deviceType === 'tablet' ? 52 : 48;
@@ -61,6 +69,9 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
     }
 
     if (onBack) {
+      const backLabel = generateAccessibilityLabel('Back', 'button');
+      const backHint = generateAccessibilityHint('Go back', 'previous screen');
+
       return (
         <TouchableOpacity
           style={[styles.backButton, {
@@ -68,9 +79,16 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
             height: touchTargetSize,
             borderRadius: touchTargetSize / 2,
           }]}
-          onPress={onBack}
+          onPress={() => {
+            onBack();
+            if (screenReaderEnabled) {
+              announceNavigation('Going back');
+            }
+          }}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={backLabel}
+          accessibilityHint={backHint}
+          accessible={true}
         >
           <NavigationIcon
             name="arrow_back"
@@ -126,12 +144,21 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
     </View>
   );
 
+  const appBarLabel = generateAccessibilityLabel(title, subtitle ? 'app bar' : undefined);
+  const appBarHint = generateAccessibilityHint('Navigate', 'app functions');
+
   return (
-    <View style={[styles.container, {
-      backgroundColor,
-      elevation,
-      minHeight: adjustedAppBarHeight + (Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0),
-    }]}>
+    <View
+      style={[styles.container, {
+        backgroundColor,
+        elevation,
+        minHeight: adjustedAppBarHeight + (Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0),
+      }]}
+      accessibilityRole="toolbar"
+      accessibilityLabel={appBarLabel}
+      accessibilityHint={appBarHint}
+      accessible={true}
+    >
       <StatusBar
         backgroundColor={backgroundColor}
         barStyle="light-content"
@@ -148,33 +175,23 @@ const MaterialAppBar: React.FC<MaterialAppBarProps> = ({
   );
 };
 
+// Note: Styles are now handled responsively in the component
+// This maintains backward compatibility for any external usage
 const styles = StyleSheet.create({
   container: {
-    paddingTop: Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0,
-    minHeight: 56 + (Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
-    elevation: 4,
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 56,
-    paddingHorizontal: MaterialSpacing.md,
   },
   backButton: {
-    width: 40,
-    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: MaterialSpacing.sm,
-    borderRadius: 20,
-  },
-  backIcon: {
-    fontSize: 24,
-    fontWeight: '600',
   },
   titleContainer: {
     flex: 1,

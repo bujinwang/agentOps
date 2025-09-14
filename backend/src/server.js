@@ -31,12 +31,16 @@ const interactionRoutes = require('./routes/interactions');
 const analyticsRoutes = require('./routes/analytics');
 const searchRoutes = require('./routes/search');
 const notificationRoutes = require('./routes/notifications');
+const templateRoutes = require('./routes/templates');
+const conversionRoutes = require('./routes/conversion');
 const fileRoutes = require('./routes/files');
 const profileRoutes = require('./routes/profile');
 const migrationRoutes = require('./routes/migrations');
+const workflowAnalyticsRoutes = require('./routes/workflowAnalytics');
+const experimentsRoutes = require('./routes/experiments');
 
 // Import job queues
-const { setupJobQueues } = require('./jobs/setup');
+const { setupJobQueues, addWorkflowProcessingJob } = require('./jobs/setup');
 const migrationManager = require('./migrations');
 
 const app = express();
@@ -112,9 +116,13 @@ app.use('/api/interactions', interactionRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/templates', templateRoutes);
+app.use('/api/conversion', conversionRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/migrations', migrationRoutes);
+app.use('/api/workflow-analytics', workflowAnalyticsRoutes);
+app.use('/api/experiments', experimentsRoutes);
 
 // Remove duplicate webhook routes - use API endpoints only
 // Frontend should connect to /api/* endpoints, not webhook routes
@@ -156,6 +164,17 @@ async function startServer() {
     await setupJobQueues();
     logger.info('Job queues setup successfully');
 
+    // Start workflow scheduler (runs every 5 minutes)
+    workflowInterval = setInterval(async () => {
+      try {
+        await addWorkflowProcessingJob();
+      } catch (error) {
+        logger.error('Failed to schedule workflow processing:', error);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    logger.info('Workflow scheduler started (runs every 5 minutes)');
+
     // Start the server
     app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
@@ -169,16 +188,23 @@ async function startServer() {
   }
 }
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
+// Store workflow interval reference for cleanup
+let workflowInterval;
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
+// Graceful shutdown
+const gracefulShutdown = async () => {
+  logger.info('Shutting down gracefully...');
+
+  if (workflowInterval) {
+    clearInterval(workflowInterval);
+    logger.info('Workflow scheduler stopped');
+  }
+
   process.exit(0);
-});
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
