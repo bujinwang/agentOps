@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import leadScoringService from '../services/LeadScoringService';
 import leadScoreApiService from '../services/leadScoreApiService';
+import { useConversionTracking } from './useConversionTracking';
+import { ConversionFunnelData, ConversionMetrics } from '../types/conversion';
 
 export interface LeadAnalyticsSummary {
   totalLeads: number;
@@ -50,6 +52,8 @@ export interface LeadAnalyticsData {
   conversionByGrade: ConversionByGradeItem[];
   propertyTypePerformance: PropertyTypePerformanceItem[];
   geographicPerformance: GeographicPerformanceItem[];
+  conversionFunnel?: ConversionFunnelData;
+  conversionMetrics?: ConversionMetrics;
 }
 
 export type TimeRange = '7d' | '30d' | '90d' | '1y';
@@ -80,6 +84,19 @@ const useLeadAnalytics = (options: UseLeadAnalyticsOptions = {}): UseLeadAnalyti
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>(initialTimeRange);
+
+  // Initialize conversion tracking
+  const {
+    funnelData: conversionFunnel,
+    metrics: conversionMetrics,
+    loadFunnelData,
+    loadMetrics,
+    isLoading: conversionLoading,
+    error: conversionError
+  } = useConversionTracking({
+    autoRefresh: false, // We'll handle refresh manually
+    refreshInterval: undefined
+  });
 
   const generateLocalAnalytics = useCallback(async (): Promise<LeadAnalyticsData> => {
     // Generate analytics from local scoring service when backend is unavailable
@@ -131,7 +148,112 @@ const useLeadAnalytics = (options: UseLeadAnalyticsOptions = {}): UseLeadAnalyti
         { region: 'Rural', avgScore: 72.1, leadCount: 35 },
         { region: 'Waterfront', avgScore: 86.7, leadCount: 18 },
         { region: 'Commercial', avgScore: 69.4, leadCount: 14 }
-      ]
+      ],
+      conversionFunnel: {
+        funnelName: 'Standard Real Estate Conversion Funnel',
+        stages: [
+          {
+            stage: 'lead_created',
+            name: 'Lead Created',
+            order: 1,
+            leadsInStage: 147,
+            leadsAtStage: 147,
+            conversionRate: 100,
+            averageDaysInStage: 0,
+            totalValue: 0
+          },
+          {
+            stage: 'contact_made',
+            name: 'Contact Made',
+            order: 2,
+            leadsInStage: 132,
+            leadsAtStage: 132,
+            conversionRate: 89.8,
+            averageDaysInStage: 2,
+            totalValue: 0
+          },
+          {
+            stage: 'qualified',
+            name: 'Qualified',
+            order: 3,
+            leadsInStage: 98,
+            leadsAtStage: 98,
+            conversionRate: 74.2,
+            averageDaysInStage: 5,
+            totalValue: 0
+          },
+          {
+            stage: 'showing_scheduled',
+            name: 'Showing Scheduled',
+            order: 4,
+            leadsInStage: 67,
+            leadsAtStage: 67,
+            conversionRate: 68.4,
+            averageDaysInStage: 8,
+            totalValue: 0
+          },
+          {
+            stage: 'showing_completed',
+            name: 'Showing Completed',
+            order: 5,
+            leadsInStage: 45,
+            leadsAtStage: 45,
+            conversionRate: 67.2,
+            averageDaysInStage: 12,
+            totalValue: 0
+          },
+          {
+            stage: 'offer_submitted',
+            name: 'Offer Submitted',
+            order: 6,
+            leadsInStage: 28,
+            leadsAtStage: 28,
+            conversionRate: 62.2,
+            averageDaysInStage: 18,
+            totalValue: 0
+          },
+          {
+            stage: 'offer_accepted',
+            name: 'Offer Accepted',
+            order: 7,
+            leadsInStage: 18,
+            leadsAtStage: 18,
+            conversionRate: 64.3,
+            averageDaysInStage: 25,
+            totalValue: 0
+          },
+          {
+            stage: 'sale_closed',
+            name: 'Sale Closed',
+            order: 8,
+            leadsInStage: 12,
+            leadsAtStage: 12,
+            conversionRate: 66.7,
+            averageDaysInStage: 35,
+            totalValue: 4250000
+          }
+        ],
+        totalLeads: 147,
+        overallConversionRate: 0.082,
+        averageTimeToConvert: 35
+      },
+      conversionMetrics: {
+        totalConversions: 12,
+        conversionRate: 8.2,
+        averageTimeToConvert: 35,
+        topConversionStages: [
+          { stage: 'showing_completed', count: 45, percentage: 30.6 },
+          { stage: 'showing_scheduled', count: 67, percentage: 45.6 },
+          { stage: 'offer_submitted', count: 28, percentage: 19.0 }
+        ],
+        conversionTrends: [
+          { date: '2024-01-01', conversions: 8, rate: 7.2 },
+          { date: '2024-02-01', conversions: 12, rate: 8.9 },
+          { date: '2024-03-01', conversions: 15, rate: 9.8 },
+          { date: '2024-04-01', conversions: 18, rate: 11.2 },
+          { date: '2024-05-01', conversions: 22, rate: 12.8 }
+        ]
+      }
     };
 
     return mockData;
@@ -203,20 +325,42 @@ const useLeadAnalytics = (options: UseLeadAnalyticsOptions = {}): UseLeadAnalyti
         // const analyticsResponse = await fetch(`${API_BASE_URL}/analytics/leads?timeRange=${timeRange}`);
         // const analyticsData = await analyticsResponse.json();
 
-        setData(mockData);
+        // Load conversion data
+        await loadFunnelData();
+        await loadMetrics();
+
+        // Combine lead analytics with conversion data
+        const enhancedData: LeadAnalyticsData = {
+          ...mockData,
+          conversionFunnel,
+          conversionMetrics
+        };
+
+        setData(enhancedData);
       } catch (apiError) {
         console.warn('Backend analytics not available, using local calculation:', apiError);
 
         // Fallback to local calculation if backend is unavailable
         const localData = await generateLocalAnalytics();
-        setData(localData);
+
+        // Load conversion data for fallback
+        await loadFunnelData();
+        await loadMetrics();
+
+        const enhancedLocalData: LeadAnalyticsData = {
+          ...localData,
+          conversionFunnel,
+          conversionMetrics
+        };
+
+        setData(enhancedLocalData);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
     } finally {
       setLoading(false);
     }
-  }, [timeRange]);
+  }, [timeRange, loadFunnelData, loadMetrics, conversionFunnel, conversionMetrics]);
 
   const refresh = useCallback(async () => {
     await fetchAnalyticsData();

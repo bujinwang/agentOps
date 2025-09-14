@@ -1,0 +1,494 @@
+{
+  "name": "Lead Score Management API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "/webhook/leads/:leadId/score",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Get Lead Score Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "get-lead-score"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "/webhook/leads/:leadId/score",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Update Lead Score Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        600
+      ],
+      "webhookId": "update-lead-score"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "/webhook/leads/:leadId/score/history",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Get Score History Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        900
+      ],
+      "webhookId": "get-score-history"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/webhook/leads/:leadId/calculate-score",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Calculate Score Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        1200
+      ],
+      "webhookId": "calculate-lead-score"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Get Lead Score Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Get Score",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Update Lead Score Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Update Score",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Get Score History Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Get History",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Calculate Score Webhook'].json.headers.authorization }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Auth Check - Calculate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Get lead score data\nSELECT \n  lead_id,\n  score,\n  score_category,\n  score_breakdown,\n  score_last_calculated,\n  score_history,\n  manual_score_override,\n  manual_score_reason,\n  created_at,\n  updated_at\nFROM leads \nWHERE lead_id = {{ $node['Get Lead Score Webhook'].json.params.leadId }}::integer;"
+      },
+      "name": "Get Lead Score",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        640,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Update lead score with manual override\nUPDATE leads SET \n  manual_score_override = {{ $json.score }},\n  manual_score_reason = '{{ $json.reason }}',\n  score_last_calculated = NOW(),\n  score_history = COALESCE(score_history, '[]'::jsonb) || jsonb_build_object(\n    'timestamp', NOW(),\n    'manual_override', {{ $json.score }},\n    'reason', '{{ $json.reason }}',\n    'user_id', {{ $json.userId || 1 }}\n  ),\n  updated_at = NOW()\nWHERE lead_id = {{ $node['Update Lead Score Webhook'].json.params.leadId }}::integer\nRETURNING lead_id, score, score_category, manual_score_override, manual_score_reason, score_last_calculated;"
+      },
+      "name": "Update Lead Score",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        640,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Get score history for lead\nSELECT \n  score_history,\n  score_last_calculated\nFROM leads \nWHERE lead_id = {{ $node['Get Score History Webhook'].json.params.leadId }}::integer;"
+      },
+      "name": "Get Score History",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        640,
+        800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract lead data for scoring\nconst leadData = $input.all()[0].json.body || {};\nconst leadId = $node['Calculate Score Webhook'].json.params.leadId;\n\n// Enhanced scoring algorithm with more factors\nlet totalScore = 0;\nlet breakdown = { budget: 0, timeline: 0, propertyType: 0, location: 0, engagement: 0, qualification: 0 };\n\n// Budget scoring (30% weight)\nif (leadData.budget_max) {\n  if (leadData.budget_max >= 1000000) breakdown.budget = 100;\n  else if (leadData.budget_max >= 750000) breakdown.budget = 85;\n  else if (leadData.budget_max >= 500000) breakdown.budget = 70;\n  else if (leadData.budget_max >= 300000) breakdown.budget = 55;\n  else breakdown.budget = 40;\n}\ntotalScore += breakdown.budget * 0.3;\n\n// Timeline scoring (25% weight)\nif (leadData.timeline) {\n  const timeline = leadData.timeline.toLowerCase();\n  if (timeline.includes('asap') || timeline.includes('immediately')) breakdown.timeline = 100;\n  else if (timeline.includes('this month') || timeline.includes('within 30 days')) breakdown.timeline = 85;\n  else if (timeline.includes('1-2 months') || timeline.includes('within 60 days')) breakdown.timeline = 70;\n  else if (timeline.includes('3-6 months')) breakdown.timeline = 55;\n  else breakdown.timeline = 40;\n}\ntotalScore += breakdown.timeline * 0.25;\n\n// Property type scoring (20% weight)\nif (leadData.property_type) {\n  const type = leadData.property_type.toLowerCase();\n  if (type.includes('house') || type.includes('single-family')) breakdown.propertyType = 90;\n  else if (type.includes('condo') || type.includes('apartment')) breakdown.propertyType = 80;\n  else if (type.includes('townhouse')) breakdown.propertyType = 75;\n  else if (type.includes('land')) breakdown.propertyType = 60;\n  else breakdown.propertyType = 70;\n}\ntotalScore += breakdown.propertyType * 0.2;\n\n// Location scoring (15% weight)\nif (leadData.desired_location) {\n  const location = leadData.desired_location.toLowerCase();\n  if (location.includes('downtown') || location.includes('uptown')) breakdown.location = 90;\n  else if (location.includes('west end') || location.includes('kitsilano')) breakdown.location = 80;\n  else if (location.includes('commercial drive') || location.includes('mount pleasant')) breakdown.location = 70;\n  else breakdown.location = 60;\n}\ntotalScore += breakdown.location * 0.15;\n\n// Engagement scoring (10% weight)\nlet engagementScore = 50;\nif (leadData.source) {\n  const source = leadData.source.toLowerCase();\n  if (source.includes('referral')) engagementScore = 95;\n  else if (source.includes('website') || source.includes('organic')) engagementScore = 80;\n  else if (source.includes('facebook') || source.includes('google')) engagementScore = 70;\n  else if (source.includes('cold call')) engagementScore = 40;\n}\nif (leadData.phone_number) engagementScore += 10;\nif (leadData.notes && leadData.notes.length > 100) engagementScore += 10;\nbreakdown.engagement = Math.min(100, engagementScore);\ntotalScore += breakdown.engagement * 0.1;\n\n// Qualification scoring (weighted by existing qualification)\nif (leadData.qualification_status) {\n  const qual = leadData.qualification_status.toLowerCase();\n  if (qual.includes('pre-qualified') || qual.includes('qualified')) breakdown.qualification = 90;\n  else if (qual.includes('needs qualification')) breakdown.qualification = 60;\n  else breakdown.qualification = 70;\n}\ntotalScore += breakdown.qualification * 0.1;\n\n// Determine category\nconst category = totalScore >= 80 ? 'High' : totalScore >= 60 ? 'Medium' : 'Low';\n\n// Generate insights\nconst insights = [];\nif (breakdown.budget >= 80) insights.push('Strong budget position');\nif (breakdown.timeline >= 80) insights.push('Urgent timeline - prioritize');\nif (breakdown.engagement >= 80) insights.push('Highly engaged lead');\nif (breakdown.qualification >= 80) insights.push('Well-qualified prospect');\n\nreturn {\n  leadId: leadId,\n  totalScore: Math.round(totalScore),\n  category,\n  breakdown,\n  insights,\n  calculatedAt: new Date().toISOString(),\n  confidence: Math.min(100, Math.max(60, totalScore - 10))\n};"
+      },
+      "name": "Calculate Enhanced Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        640,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Save calculated score to database\nUPDATE leads SET \n  score = {{ $json.totalScore }},\n  score_category = '{{ $json.category }}',\n  score_breakdown = '{{ JSON.stringify($json.breakdown) }}'::jsonb,\n  score_last_calculated = NOW(),\n  score_history = COALESCE(score_history, '[]'::jsonb) || jsonb_build_object(\n    'timestamp', NOW(),\n    'score', {{ $json.totalScore }},\n    'category', '{{ $json.category }}',\n    'breakdown', '{{ JSON.stringify($json.breakdown) }}',\n    'insights', '{{ JSON.stringify($json.insights) }}',\n    'confidence', {{ $json.confidence }},\n    'calculation_type', 'api_calculated'\n  ),\n  updated_at = NOW()\nWHERE lead_id = {{ $json.leadId }}::integer\nRETURNING *;"
+      },
+      "name": "Save Calculated Score",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        840,
+        1100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-default",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"data\": $json }"
+      },
+      "name": "Get Score Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        840,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"data\": $json }"
+      },
+      "name": "Update Score Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        840,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"data\": { \"history\": $json.score_history, \"lastCalculated\": $json.score_last_calculated } }"
+      },
+      "name": "History Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        840,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"data\": $json }"
+      },
+      "name": "Calculate Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseStatusCode": 401,
+        "responseBody": "{ \"error\": \"Unauthorized\" }"
+      },
+      "name": "Auth Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        440,
+        1500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseStatusCode": 404,
+        "responseBody": "{ \"error\": \"Lead not found\" }"
+      },
+      "name": "Not Found Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        1400
+      ]
+    }
+  ],
+  "connections": {
+    "Get Lead Score Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Get Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Score Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Update Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Score History Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Get History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Score Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auth Check - Calculate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Get Score": {
+      "main": [
+        [
+          {
+            "node": "Get Lead Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Update Score": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Get History": {
+      "main": [
+        [
+          {
+            "node": "Get Score History",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Check - Calculate": {
+      "main": [
+        [
+          {
+            "node": "Calculate Enhanced Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auth Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead Score": {
+      "main": [
+        [
+          {
+            "node": "Get Score Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Score": {
+      "main": [
+        [
+          {
+            "node": "Update Score Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Score History": {
+      "main": [
+        [
+          {
+            "node": "History Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Enhanced Score": {
+      "main": [
+        [
+          {
+            "node": "Save Calculated Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Calculated Score": {
+      "main": [
+        [
+          {
+            "node": "Calculate Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/Toronto"
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "id": "lead-score-management-workflow",
+  "tags": []
+}

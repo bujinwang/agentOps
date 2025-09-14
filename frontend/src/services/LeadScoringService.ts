@@ -9,6 +9,8 @@ import {
   ScoringFactor
 } from '../types/leadScoring';
 import leadScoreApiService from './leadScoreApiService';
+import { conversionApiService } from './conversionApiService';
+import { ConversionEvent, ConversionTimeline } from '../types/conversion';
 
 class LeadScoringService {
   private config: LeadScoringConfig;
@@ -563,6 +565,254 @@ class LeadScoringService {
       default:
         return 'F';
     }
+  }
+
+  /**
+   * Get conversion data for a lead
+   */
+  async getConversionData(leadId: number): Promise<{
+    timeline: ConversionTimeline | null;
+    conversionProbability: number;
+    currentStage: string;
+    daysInFunnel: number;
+  }> {
+    try {
+      const timelineResponse = await conversionApiService.getConversionTimeline(leadId);
+
+      if (timelineResponse.success && timelineResponse.data) {
+        const timeline = timelineResponse.data;
+        const currentStage = timeline.lastEvent?.eventType || 'lead_created';
+        const daysInFunnel = timeline.lastEvent
+          ? Math.floor((Date.now() - new Date(timeline.lastEvent.eventTimestamp).getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+
+        // Calculate conversion probability based on historical data and current progress
+        const conversionProbability = await this.calculateConversionProbability(
+          timeline,
+          currentStage,
+          daysInFunnel
+        );
+
+        return {
+          timeline,
+          conversionProbability,
+          currentStage,
+          daysInFunnel
+        };
+      }
+
+      return {
+        timeline: null,
+        conversionProbability: 0.1, // Base probability for new leads
+        currentStage: 'lead_created',
+        daysInFunnel: 0
+      };
+    } catch (error) {
+      console.error('Error getting conversion data:', error);
+      return {
+        timeline: null,
+        conversionProbability: 0.1,
+        currentStage: 'lead_created',
+        daysInFunnel: 0
+      };
+    }
+  }
+
+  /**
+   * Calculate conversion probability based on historical data
+   */
+  private async calculateConversionProbability(
+    timeline: ConversionTimeline,
+    currentStage: string,
+    daysInFunnel: number
+  ): Promise<number> {
+    let probability = 0.1; // Base probability
+
+    // Stage-based probability multipliers
+    const stageMultipliers: Record<string, number> = {
+      'lead_created': 0.1,
+      'contact_made': 0.15,
+      'qualified': 0.25,
+      'showing_scheduled': 0.4,
+      'showing_completed': 0.6,
+      'offer_submitted': 0.75,
+      'offer_accepted': 0.9,
+      'sale_closed': 1.0
+    };
+
+    probability = stageMultipliers[currentStage] || 0.1;
+
+    // Adjust based on engagement (number of events)
+    const eventCount = timeline.events.length;
+    if (eventCount > 5) probability *= 1.2; // Highly engaged
+    else if (eventCount > 2) probability *= 1.1; // Moderately engaged
+
+    // Adjust based on time in funnel (decay for stale leads)
+    if (daysInFunnel > 90) probability *= 0.7; // Significantly decayed
+    else if (daysInFunnel > 30) probability *= 0.85; // Moderately decayed
+
+    // Adjust based on recent activity
+    const lastEvent = timeline.lastEvent;
+    if (lastEvent) {
+      const daysSinceLastEvent = Math.floor(
+        (Date.now() - new Date(lastEvent.eventTimestamp).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      if (daysSinceLastEvent > 30) probability *= 0.8;
+      else if (daysSinceLastEvent > 7) probability *= 0.9;
+    }
+
+    return Math.max(0, Math.min(1, probability));
+  }
+
+  /**
+   * Enhanced calculateScore with conversion data integration
+   */
+  async calculateScoreWithConversion(leadData: LeadData): Promise<ScoringResult> {
+    // Get base scoring result
+    const baseResult = await this.calculateScore(leadData);
+
+    // Get conversion data
+    const conversionData = await this.getConversionData(leadData.id);
+
+    // Enhance scoring with conversion factors
+    const enhancedBreakdown = {
+      ...baseResult.score.scoreBreakdown,
+      conversionProgress: this.scoreConversionProgress(conversionData),
+      conversionProbability: conversionData.conversionProbability * 100
+    };
+
+    // Recalculate total score with conversion factors
+    const conversionWeight = 0.15; // 15% weight for conversion factors
+    const conversionScore = (enhancedBreakdown.conversionProgress + enhancedBreakdown.conversionProbability) / 2;
+    const enhancedTotalScore = baseResult.score.totalScore * (1 - conversionWeight) + conversionScore * conversionWeight;
+
+    // Update the score with enhanced data
+    const enhancedScore: LeadScore = {
+      ...baseResult.score,
+      totalScore: enhancedTotalScore,
+      scoreBreakdown: enhancedBreakdown,
+      grade: this.calculateGrade(enhancedTotalScore)
+    };
+
+    // Add conversion-specific insights
+    const conversionInsights = this.generateConversionInsights(conversionData);
+    const enhancedInsights = [...baseResult.insights, ...conversionInsights];
+
+    // Add conversion-specific actions
+    const conversionActions = this.generateConversionActions(conversionData);
+    const enhancedActions = [...baseResult.actions, ...conversionActions];
+
+    return {
+      score: enhancedScore,
+      insights: enhancedInsights,
+      actions: enhancedActions,
+      riskFactors: baseResult.riskFactors
+    };
+  }
+
+  /**
+   * Score conversion progress
+   */
+  private scoreConversionProgress(conversionData: {
+    timeline: ConversionTimeline | null;
+    conversionProbability: number;
+    currentStage: string;
+    daysInFunnel: number;
+  }): number {
+    const stageScores: Record<string, number> = {
+      'lead_created': 10,
+      'contact_made': 20,
+      'qualified': 35,
+      'showing_scheduled': 50,
+      'showing_completed': 70,
+      'offer_submitted': 85,
+      'offer_accepted': 95,
+      'sale_closed': 100
+    };
+
+    let score = stageScores[conversionData.currentStage] || 10;
+
+    // Boost score based on engagement
+    if (conversionData.timeline && conversionData.timeline.events.length > 3) {
+      score += 10;
+    }
+
+    // Reduce score for slow progress
+    if (conversionData.daysInFunnel > 60) {
+      score *= 0.9;
+    }
+
+    return Math.max(0, Math.min(100, score));
+  }
+
+  /**
+   * Generate conversion-specific insights
+   */
+  private generateConversionInsights(conversionData: {
+    timeline: ConversionTimeline | null;
+    conversionProbability: number;
+    currentStage: string;
+    daysInFunnel: number;
+  }): string[] {
+    const insights: string[] = [];
+
+    if (conversionData.conversionProbability > 0.7) {
+      insights.push('High conversion probability - prioritize this lead');
+    } else if (conversionData.conversionProbability < 0.3) {
+      insights.push('Low conversion probability - consider nurturing strategies');
+    }
+
+    if (conversionData.daysInFunnel > 30) {
+      insights.push(`Lead has been in funnel for ${conversionData.daysInFunnel} days - may need re-engagement`);
+    }
+
+    if (conversionData.timeline && conversionData.timeline.events.length > 5) {
+      insights.push('Highly engaged lead with multiple touchpoints');
+    }
+
+    const advancedStages = ['showing_completed', 'offer_submitted', 'offer_accepted'];
+    if (advancedStages.includes(conversionData.currentStage)) {
+      insights.push(`Lead is in advanced stage: ${conversionData.currentStage.replace('_', ' ')}`);
+    }
+
+    return insights;
+  }
+
+  /**
+   * Generate conversion-specific actions
+   */
+  private generateConversionActions(conversionData: {
+    timeline: ConversionTimeline | null;
+    conversionProbability: number;
+    currentStage: string;
+    daysInFunnel: number;
+  }): string[] {
+    const actions: string[] = [];
+
+    if (conversionData.conversionProbability > 0.8) {
+      actions.push('Fast-track this high-probability lead');
+      actions.push('Schedule immediate follow-up');
+    }
+
+    if (conversionData.daysInFunnel > 14 && conversionData.currentStage === 'contact_made') {
+      actions.push('Send follow-up email or call to move lead forward');
+    }
+
+    if (conversionData.currentStage === 'qualified' && conversionData.daysInFunnel < 7) {
+      actions.push('Schedule property showing within 48 hours');
+    }
+
+    if (conversionData.currentStage === 'showing_completed') {
+      actions.push('Follow up on showing feedback and prepare offer');
+    }
+
+    if (conversionData.conversionProbability < 0.4) {
+      actions.push('Implement lead nurturing campaign');
+      actions.push('Send educational content about buying process');
+    }
+
+    return actions;
   }
 
   /**

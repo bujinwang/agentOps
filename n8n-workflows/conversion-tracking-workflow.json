@@ -1,0 +1,554 @@
+{
+  "name": "Conversion Tracking System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "leads/:leadId/conversion-events",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "log-conversion-event",
+      "name": "Log Conversion Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "leads/:leadId/conversion-timeline",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "get-conversion-timeline",
+      "name": "Get Conversion Timeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [240, 500]
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "leads/:leadId/conversion-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "update-conversion-status",
+      "name": "Update Conversion Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [240, 700]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "analytics/conversions/funnel",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "get-conversion-funnel",
+      "name": "Get Conversion Funnel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [240, 900]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": "={{ $json.success }}"
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "eventId",
+              "value": "={{ $json.eventId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-conversion-response",
+      "name": "Set Conversion Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": "={{ $json.success }}"
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            }
+          ],
+          "object": [
+            {
+              "name": "timeline",
+              "value": "={{ $json.timeline }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-timeline-response",
+      "name": "Set Timeline Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [600, 500]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": "={{ $json.success }}"
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "newStatus",
+              "value": "={{ $json.newStatus }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-status-response",
+      "name": "Set Status Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [600, 700]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": "={{ $json.success }}"
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            }
+          ],
+          "object": [
+            {
+              "name": "funnelData",
+              "value": "={{ $json.funnelData }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-funnel-response",
+      "name": "Set Funnel Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [600, 900]
+    },
+    {
+      "parameters": {
+        "operation": "INSERT",
+        "table": "conversion_events",
+        "columns": "lead_id,event_type,event_description,event_data,created_by",
+        "values": "={{ $node[\"Log Conversion Event\"].parameter.path.leadId }},={{ $json.eventType }},={{ $json.eventDescription }},={{ $json.eventData }},={{ $json.userId }}"
+      },
+      "id": "insert-conversion-event",
+      "name": "Insert Conversion Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "SELECT",
+        "table": "conversion_events",
+        "conditions": "lead_id = {{ $node[\"Get Conversion Timeline\"].parameter.path.leadId }}",
+        "orderBy": "event_timestamp DESC"
+      },
+      "id": "get-conversion-events",
+      "name": "Get Conversion Events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 500],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "UPDATE",
+        "table": "leads",
+        "updateKey": "id",
+        "updateFields": "conversion_status,current_funnel_stage",
+        "conditions": "id = {{ $node[\"Update Conversion Status\"].parameter.path.leadId }}",
+        "values": "={{ $json.newStatus }},={{ $json.newStage }}"
+      },
+      "id": "update-lead-status",
+      "name": "Update Lead Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 700],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "SELECT",
+        "query": "SELECT * FROM conversion_funnel_analytics WHERE funnel_name = 'Standard Real Estate Conversion Funnel'",
+        "conditions": ""
+      },
+      "id": "get-funnel-analytics",
+      "name": "Get Funnel Analytics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 900],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": true
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "Conversion event logged successfully"
+            },
+            {
+              "name": "eventId",
+              "value": "={{ $node[\"Insert Conversion Event\"].json[0].id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "conversion-event-success",
+      "name": "Conversion Event Success",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": true
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "Conversion timeline retrieved successfully"
+            }
+          ],
+          "object": [
+            {
+              "name": "timeline",
+              "value": "={{ $node[\"Get Conversion Events\"].json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "timeline-success",
+      "name": "Timeline Success",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [780, 500]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": true
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "Conversion status updated successfully"
+            },
+            {
+              "name": "newStatus",
+              "value": "={{ $json.newStatus }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "status-update-success",
+      "name": "Status Update Success",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [780, 700]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": true
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "Conversion funnel data retrieved successfully"
+            }
+          ],
+          "object": [
+            {
+              "name": "funnelData",
+              "value": "={{ $node[\"Get Funnel Analytics\"].json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "funnel-success",
+      "name": "Funnel Success",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [780, 900]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": false
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "Database operation failed"
+            },
+            {
+              "name": "error",
+              "value": "={{ $node[\"Insert Conversion Event\"].error }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "database-error",
+      "name": "Database Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [600, 100]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": false
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "Invalid request data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "validation-error",
+      "name": "Validation Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [600, 50]
+    }
+  ],
+  "connections": {
+    "Log Conversion Event": {
+      "main": [
+        [
+          {
+            "node": "insert-conversion-event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Conversion Timeline": {
+      "main": [
+        [
+          {
+            "node": "get-conversion-events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Conversion Status": {
+      "main": [
+        [
+          {
+            "node": "update-lead-status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Conversion Funnel": {
+      "main": [
+        [
+          {
+            "node": "get-funnel-analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "insert-conversion-event": {
+      "main": [
+        [
+          {
+            "node": "conversion-event-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-conversion-events": {
+      "main": [
+        [
+          {
+            "node": "timeline-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update-lead-status": {
+      "main": [
+        [
+          {
+            "node": "status-update-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-funnel-analytics": {
+      "main": [
+        [
+          {
+            "node": "funnel-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "conversion-event-success": {
+      "main": [
+        [
+          {
+            "node": "set-conversion-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "timeline-success": {
+      "main": [
+        [
+          {
+            "node": "set-timeline-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "status-update-success": {
+      "main": [
+        [
+          {
+            "node": "set-status-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "funnel-success": {
+      "main": [
+        [
+          {
+            "node": "set-funnel-response",
+            "type": "main",
+            "index": 0
+          }
+        }
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null
+}

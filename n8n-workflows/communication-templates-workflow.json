@@ -1,0 +1,660 @@
+{
+  "name": "Communication Templates Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "communication/templates",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-list",
+      "name": "Templates List Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "communication/templates",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-create",
+      "name": "Templates Create Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 460]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "communication/templates/:id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-get",
+      "name": "Templates Get Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 620]
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "communication/templates/:id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-update",
+      "name": "Templates Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 780]
+    },
+    {
+      "parameters": {
+        "httpMethod": "DELETE",
+        "path": "communication/templates/:id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-delete",
+      "name": "Templates Delete Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 940]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "communication/templates/:id/render",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-render",
+      "name": "Templates Render Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 1100]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "communication/templates/suggestions/:leadId",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-suggestions",
+      "name": "Templates Suggestions Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 1260]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "communication/templates/usage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-usage",
+      "name": "Templates Usage Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 1420]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "communication/templates/:id/analytics",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-analytics",
+      "name": "Templates Analytics Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 1580]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "communication/templates/library",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-templates-library",
+      "name": "Templates Library Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 1740]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [
+            {
+              "name": "success",
+              "value": true
+            }
+          ],
+          "string": [
+            {
+              "name": "message",
+              "value": "Templates retrieved successfully"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-success-response",
+      "name": "Set Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "operation": "SELECT",
+        "query": "SELECT id, name, category, subject_template, content_template, variables, conditions, is_active, created_by, created_at, updated_at FROM communication_templates WHERE is_active = true ORDER BY created_at DESC",
+        "options": {}
+      },
+      "id": "postgres-templates-list",
+      "name": "PostgreSQL - Templates List",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "INSERT",
+        "query": "INSERT INTO communication_templates (name, category, subject_template, content_template, variables, conditions, is_active, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+        "options": {}
+      },
+      "id": "postgres-templates-create",
+      "name": "PostgreSQL - Templates Create",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 460],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "SELECT",
+        "query": "SELECT id, name, category, subject_template, content_template, variables, conditions, is_active, created_by, created_at, updated_at FROM communication_templates WHERE id = $1",
+        "options": {}
+      },
+      "id": "postgres-templates-get",
+      "name": "PostgreSQL - Templates Get",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 620],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "UPDATE",
+        "query": "UPDATE communication_templates SET name = COALESCE($2, name), category = COALESCE($3, category), subject_template = COALESCE($4, subject_template), content_template = COALESCE($5, content_template), variables = COALESCE($6, variables), conditions = COALESCE($7, conditions), is_active = COALESCE($8, is_active), updated_at = NOW() WHERE id = $1 RETURNING *",
+        "options": {}
+      },
+      "id": "postgres-templates-update",
+      "name": "PostgreSQL - Templates Update",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 780],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "DELETE",
+        "query": "DELETE FROM communication_templates WHERE id = $1",
+        "options": {}
+      },
+      "id": "postgres-templates-delete",
+      "name": "PostgreSQL - Templates Delete",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 940],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "SELECT",
+        "query": "SELECT l.* FROM leads l WHERE l.id = $1",
+        "options": {}
+      },
+      "id": "postgres-get-lead-data",
+      "name": "PostgreSQL - Get Lead Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [600, 1100],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "SELECT",
+        "query": "SELECT * FROM communication_templates WHERE id = $1",
+        "options": {}
+      },
+      "id": "postgres-get-template-for-render",
+      "name": "PostgreSQL - Get Template for Render",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [780, 1100],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const template = $nodeInput[0].json;\nconst leadData = $nodeInput[1].json;\n\nconst agentData = {\n  agentName: 'Sarah Johnson',\n  agentPhone: '(555) 123-4567',\n  agentEmail: 'sarah@realestate.com'\n};\n\nconst customVars = $nodeInput[2].json.customVariables || {};\n\n// Combine all context\nconst context = {\n  ...leadData,\n  ...agentData,\n  ...customVars\n};\n\n// Render subject\nlet subject = null;\nif (template.subject_template) {\n  subject = template.subject_template.replace(/\\{\\{([^}]+)\\}\\}/g, (match, key) => {\n    const value = context[key.trim()];\n    return value !== undefined ? value : match;\n  });\n}\n\n// Render content\nconst content = template.content_template.replace(/\\{\\{([^}]+)\\}\\}/g, (match, key) => {\n  const value = context[key.trim()];\n  return value !== undefined ? value : match;\n});\n\nreturn [\n  {\n    json: {\n      subject,\n      content,\n      templateId: template.id,\n      renderedAt: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "id": "function-render-template",
+      "name": "Function - Render Template",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [960, 1100]
+    },
+    {
+      "parameters": {
+        "operation": "INSERT",
+        "query": "INSERT INTO template_usage (template_id, variant_id, lead_id, communication_type, sent_at, response_data) VALUES ($1, $2, $3, $4, NOW(), $5) RETURNING *",
+        "options": {}
+      },
+      "id": "postgres-track-usage",
+      "name": "PostgreSQL - Track Usage",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 1420],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "SELECT",
+        "query": "SELECT \n  COUNT(*) as total_sent,\n  COUNT(CASE WHEN opened_at IS NOT NULL THEN 1 END) as total_opened,\n  COUNT(CASE WHEN clicked_at IS NOT NULL THEN 1 END) as total_clicked,\n  COUNT(CASE WHEN responded_at IS NOT NULL THEN 1 END) as total_responded,\n  ROUND(AVG(EXTRACT(EPOCH FROM (responded_at - sent_at))/3600), 2) as avg_response_time,\n  ROUND(COUNT(CASE WHEN opened_at IS NOT NULL THEN 1 END)::decimal / COUNT(*)::decimal * 100, 2) as open_rate,\n  ROUND(COUNT(CASE WHEN clicked_at IS NOT NULL THEN 1 END)::decimal / COUNT(*)::decimal * 100, 2) as click_rate,\n  ROUND(COUNT(CASE WHEN responded_at IS NOT NULL THEN 1 END)::decimal / COUNT(*)::decimal * 100, 2) as response_rate\nFROM template_usage \nWHERE template_id = $1 AND sent_at >= NOW() - INTERVAL '30 days'",
+        "options": {}
+      },
+      "id": "postgres-analytics-query",
+      "name": "PostgreSQL - Analytics Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 1580],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const analytics = $nodeInput[0].json;\nconst templateId = $nodeInput[1].json.id;\n\nreturn [\n  {\n    json: {\n      templateId: parseInt(templateId),\n      totalSent: parseInt(analytics.total_sent || 0),\n      totalOpened: parseInt(analytics.total_opened || 0),\n      totalClicked: parseInt(analytics.total_clicked || 0),\n      totalResponded: parseInt(analytics.total_responded || 0),\n      openRate: parseFloat(analytics.open_rate || 0),\n      clickRate: parseFloat(analytics.click_rate || 0),\n      responseRate: parseFloat(analytics.response_rate || 0),\n      averageResponseTime: parseFloat(analytics.avg_response_time || 0)\n    }\n  }\n];"
+      },
+      "id": "function-format-analytics",
+      "name": "Function - Format Analytics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [600, 1580]
+    },
+    {
+      "parameters": {
+        "operation": "SELECT",
+        "query": "SELECT \n  category,\n  COUNT(*) as templates_count\nFROM communication_templates \nWHERE is_active = true \nGROUP BY category \nORDER BY category",
+        "options": {}
+      },
+      "id": "postgres-categories-query",
+      "name": "PostgreSQL - Categories Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 1740],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "SELECT",
+        "query": "SELECT id, name, category, subject_template, content_template, variables, conditions, is_active, created_at, updated_at FROM communication_templates WHERE is_active = true ORDER BY category, name",
+        "options": {}
+      },
+      "id": "postgres-templates-for-library",
+      "name": "PostgreSQL - Templates for Library",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [600, 1740],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-connection",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const categories = $nodeInput[0].json;\nconst templates = $nodeInput[1].json;\n\nconst categoryMap = {};\ncategories.forEach(cat => {\n  categoryMap[cat.category] = {\n    id: cat.category,\n    name: cat.category.charAt(0).toUpperCase() + cat.category.slice(1),\n    description: `Templates for ${cat.category} communications`,\n    templatesCount: parseInt(cat.templates_count)\n  };\n});\n\nreturn [\n  {\n    json: {\n      categories: Object.values(categoryMap),\n      templates: templates.map(t => ({\n        ...t,\n        variables: JSON.parse(t.variables || '{}'),\n        conditions: JSON.parse(t.conditions || '[]')\n      })),\n      totalCount: templates.length,\n      filters: {}\n    }\n  }\n];"
+      },
+      "id": "function-build-library",
+      "name": "Function - Build Library",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [780, 1740]
+    }
+  ],
+  "connections": {
+    "webhook-templates-list": {
+      "main": [
+        [
+          {
+            "node": "postgres-templates-list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-templates-create": {
+      "main": [
+        [
+          {
+            "node": "postgres-templates-create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-templates-get": {
+      "main": [
+        [
+          {
+            "node": "postgres-templates-get",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-templates-update": {
+      "main": [
+        [
+          {
+            "node": "postgres-templates-update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-templates-delete": {
+      "main": [
+        [
+          {
+            "node": "postgres-templates-delete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-templates-render": {
+      "main": [
+        [
+          {
+            "node": "postgres-get-lead-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-templates-suggestions": {
+      "main": [
+        [
+          {
+            "node": "postgres-templates-list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-templates-usage": {
+      "main": [
+        [
+          {
+            "node": "postgres-track-usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-templates-analytics": {
+      "main": [
+        [
+          {
+            "node": "postgres-analytics-query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-templates-library": {
+      "main": [
+        [
+          {
+            "node": "postgres-categories-query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "postgres-templates-for-library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-templates-list": {
+      "main": [
+        [
+          {
+            "node": "set-success-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-templates-create": {
+      "main": [
+        [
+          {
+            "node": "set-success-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-templates-get": {
+      "main": [
+        [
+          {
+            "node": "set-success-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-templates-update": {
+      "main": [
+        [
+          {
+            "node": "set-success-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-templates-delete": {
+      "main": [
+        [
+          {
+            "node": "set-success-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-get-lead-data": {
+      "main": [
+        [
+          {
+            "node": "postgres-get-template-for-render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-get-template-for-render": {
+      "main": [
+        [
+          {
+            "node": "function-render-template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "function-render-template": {
+      "main": [
+        [
+          {
+            "node": "set-success-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-track-usage": {
+      "main": [
+        [
+          {
+            "node": "set-success-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-analytics-query": {
+      "main": [
+        [
+          {
+            "node": "function-format-analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "function-format-analytics": {
+      "main": [
+        [
+          {
+            "node": "set-success-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-categories-query": {
+      "main": [
+        [
+          {
+            "node": "function-build-library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "postgres-templates-for-library": {
+      "main": [
+        [
+          {
+            "node": "function-build-library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "function-build-library": {
+      "main": [
+        [
+          {
+            "node": "set-success-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null
+}
