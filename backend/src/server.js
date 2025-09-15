@@ -38,6 +38,8 @@ const profileRoutes = require('./routes/profile');
 const migrationRoutes = require('./routes/migrations');
 const workflowAnalyticsRoutes = require('./routes/workflowAnalytics');
 const experimentsRoutes = require('./routes/experiments');
+const revenueRoutes = require('./routes/revenue');
+const commissionRoutes = require('./routes/commissions');
 
 // Import job queues
 const { setupJobQueues, addWorkflowProcessingJob } = require('./jobs/setup');
@@ -123,6 +125,8 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/migrations', migrationRoutes);
 app.use('/api/workflow-analytics', workflowAnalyticsRoutes);
 app.use('/api/experiments', experimentsRoutes);
+app.use('/api/revenue', revenueRoutes);
+app.use('/api/commissions', commissionRoutes);
 
 // Remove duplicate webhook routes - use API endpoints only
 // Frontend should connect to /api/* endpoints, not webhook routes

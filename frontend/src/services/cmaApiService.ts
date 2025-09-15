@@ -1,6 +1,7 @@
 // Comparative Market Analysis API Service
 // Handles all CMA-related API operations including analysis creation, comparable search, and reporting
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ComparativeMarketAnalysis,
   ComparableProperty,
@@ -30,10 +31,34 @@ import { Property } from '../types/property';
 class CMApiService {
   private baseUrl: string;
   private authToken: string | null = null;
+  private readonly TOKEN_KEY = '@cma_auth_token';
+  private readonly BASE_URL_KEY = '@cma_base_url';
 
   constructor() {
-    this.baseUrl = 'http://localhost:5678/webhook';
-    this.authToken = localStorage.getItem('authToken');
+    this.initializeService();
+  }
+
+  private async initializeService(): Promise<void> {
+    try {
+      // Get base URL from environment or secure storage
+      const envBaseUrl = process.env.EXPO_PUBLIC_CMA_API_URL ||
+                        process.env.CMA_API_URL ||
+                        'http://localhost:5678/webhook';
+
+      // Try to get stored base URL, fallback to environment
+      const storedBaseUrl = await AsyncStorage.getItem(this.BASE_URL_KEY);
+      this.baseUrl = storedBaseUrl || envBaseUrl;
+
+      // Get stored auth token
+      this.authToken = await AsyncStorage.getItem(this.TOKEN_KEY);
+    } catch (error) {
+      console.warn('CMA Service initialization error:', error);
+      // Fallback to environment defaults
+      this.baseUrl = process.env.EXPO_PUBLIC_CMA_API_URL ||
+                    process.env.CMA_API_URL ||
+                    'http://localhost:5678/webhook';
+      this.authToken = null;
+    }
   }
 
   private getHeaders(): HeadersInit {
@@ -642,19 +667,69 @@ class CMApiService {
   }
 
   /**
-   * Set authentication token
+   * Set authentication token with secure storage
    */
-  setAuthToken(token: string): void {
-    this.authToken = token;
-    localStorage.setItem('authToken', token);
+  async setAuthToken(token: string): Promise<void> {
+    try {
+      this.authToken = token;
+      await AsyncStorage.setItem(this.TOKEN_KEY, token);
+    } catch (error) {
+      console.error('Failed to store CMA auth token:', error);
+      throw new Error('Failed to securely store authentication token');
+    }
   }
 
   /**
-   * Clear authentication token
+   * Clear authentication token from secure storage
    */
-  clearAuthToken(): void {
-    this.authToken = null;
-    localStorage.removeItem('authToken');
+  async clearAuthToken(): Promise<void> {
+    try {
+      this.authToken = null;
+      await AsyncStorage.removeItem(this.TOKEN_KEY);
+    } catch (error) {
+      console.error('Failed to clear CMA auth token:', error);
+      // Don't throw here as clearing should be graceful
+    }
+  }
+
+  /**
+   * Set custom base URL for different environments
+   */
+  async setBaseUrl(url: string): Promise<void> {
+    try {
+      // Validate URL format
+      new URL(url);
+      this.baseUrl = url;
+      await AsyncStorage.setItem(this.BASE_URL_KEY, url);
+    } catch (error) {
+      console.error('Invalid CMA API URL:', error);
+      throw new Error('Invalid API URL format');
+    }
+  }
+
+  /**
+   * Get current base URL
+   */
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  /**
+   * Reset to default configuration
+   */
+  async resetToDefaults(): Promise<void> {
+    try {
+      const defaultUrl = process.env.EXPO_PUBLIC_CMA_API_URL ||
+                        process.env.CMA_API_URL ||
+                        'http://localhost:5678/webhook';
+
+      this.baseUrl = defaultUrl;
+      this.authToken = null;
+
+      await AsyncStorage.multiRemove([this.BASE_URL_KEY, this.TOKEN_KEY]);
+    } catch (error) {
+      console.error('Failed to reset CMA configuration:', error);
+    }
   }
 }
 

@@ -1,0 +1,308 @@
+{
+  "name": "Real Estate CRM Load Test Suite",
+  "version": "1.0.0",
+  "description": "Comprehensive load testing configuration for Real Estate CRM application",
+
+  "environments": {
+    "development": {
+      "baseUrl": "http://localhost:3000",
+      "apiUrl": "http://localhost:3001",
+      "databaseUrl": "postgresql://postgres:postgres@localhost:5432/real_estate_dev"
+    },
+    "staging": {
+      "baseUrl": "https://staging.real-estate-crm.com",
+      "apiUrl": "https://api-staging.real-estate-crm.com",
+      "databaseUrl": "postgresql://app:app_password@staging-db.real-estate-crm.com:5432/real_estate_staging"
+    },
+    "production": {
+      "baseUrl": "https://real-estate-crm.com",
+      "apiUrl": "https://api.real-estate-crm.com",
+      "databaseUrl": "postgresql://app:app_password@prod-db.real-estate-crm.com:5432/real_estate_prod"
+    }
+  },
+
+  "testScenarios": {
+    "userRegistrationFlow": {
+      "name": "User Registration Flow",
+      "description": "Test complete user registration and onboarding process",
+      "vus": 50,
+      "duration": "5m",
+      "endpoints": [
+        "POST /api/auth/register",
+        "POST /api/auth/verify-email",
+        "POST /api/auth/login",
+        "GET /api/user/profile",
+        "PUT /api/user/profile"
+      ],
+      "expectedResponseTime": 1000,
+      "expectedErrorRate": 0.01
+    },
+
+    "propertySearchFlow": {
+      "name": "Property Search Flow",
+      "description": "Test property search and filtering functionality",
+      "vus": 100,
+      "duration": "10m",
+      "endpoints": [
+        "POST /api/properties/search",
+        "GET /api/properties/{id}",
+        "GET /api/properties/{id}/images",
+        "POST /api/properties/{id}/favorite"
+      ],
+      "expectedResponseTime": 500,
+      "expectedErrorRate": 0.02
+    },
+
+    "leadManagementFlow": {
+      "name": "Lead Management Flow",
+      "description": "Test lead creation and management workflow",
+      "vus": 30,
+      "duration": "8m",
+      "endpoints": [
+        "POST /api/leads",
+        "GET /api/leads",
+        "PUT /api/leads/{id}",
+        "POST /api/leads/{id}/notes",
+        "PUT /api/leads/{id}/status"
+      ],
+      "expectedResponseTime": 800,
+      "expectedErrorRate": 0.01
+    },
+
+    "agentDashboardFlow": {
+      "name": "Agent Dashboard Flow",
+      "description": "Test agent dashboard and analytics access",
+      "vus": 20,
+      "duration": "6m",
+      "endpoints": [
+        "GET /api/agent/dashboard",
+        "GET /api/agent/leads",
+        "GET /api/agent/properties",
+        "GET /api/agent/analytics",
+        "GET /api/agent/commission"
+      ],
+      "expectedResponseTime": 1500,
+      "expectedErrorRate": 0.02
+    },
+
+    "adminOperationsFlow": {
+      "name": "Admin Operations Flow",
+      "description": "Test administrative functions and system management",
+      "vus": 10,
+      "duration": "4m",
+      "endpoints": [
+        "GET /api/admin/dashboard",
+        "GET /api/admin/users",
+        "POST /api/admin/users",
+        "PUT /api/admin/users/{id}",
+        "GET /api/admin/analytics"
+      ],
+      "expectedResponseTime": 2000,
+      "expectedErrorRate": 0.01
+    }
+  },
+
+  "loadPatterns": {
+    "rampUp": {
+      "description": "Gradual increase in load to identify breaking points",
+      "stages": [
+        { "duration": "2m", "target": 50 },
+        { "duration": "3m", "target": 100 },
+        { "duration": "3m", "target": 200 },
+        { "duration": "5m", "target": 200 },
+        { "duration": "3m", "target": 500 },
+        { "duration": "5m", "target": 500 },
+        { "duration": "3m", "target": 1000 },
+        { "duration": "5m", "target": 1000 },
+        { "duration": "2m", "target": 0 }
+      ]
+    },
+
+    "spikeTest": {
+      "description": "Sudden load spikes to test system resilience",
+      "stages": [
+        { "duration": "1m", "target": 100 },
+        { "duration": "30s", "target": 500 },
+        { "duration": "1m", "target": 500 },
+        { "duration": "30s", "target": 100 },
+        { "duration": "1m", "target": 100 },
+        { "duration": "30s", "target": 800 },
+        { "duration": "1m", "target": 800 },
+        { "duration": "30s", "target": 100 },
+        { "duration": "1m", "target": 100 }
+      ]
+    },
+
+    "stressTest": {
+      "description": "Extended high load to identify memory leaks and degradation",
+      "stages": [
+        { "duration": "5m", "target": 200 },
+        { "duration": "15m", "target": 400 },
+        { "duration": "20m", "target": 600 },
+        { "duration": "15m", "target": 800 },
+        { "duration": "10m", "target": 1000 },
+        { "duration": "5m", "target": 0 }
+      ]
+    },
+
+    "volumeTest": {
+      "description": "High volume data processing test",
+      "stages": [
+        { "duration": "3m", "target": 100 },
+        { "duration": "7m", "target": 300 },
+        { "duration": "10m", "target": 500 },
+        { "duration": "5m", "target": 0 }
+      ]
+    }
+  },
+
+  "thresholds": {
+    "responseTime": {
+      "avg": 1000,
+      "p95": 2000,
+      "p99": 3000
+    },
+    "errorRate": {
+      "max": 0.05
+    },
+    "throughput": {
+      "min": 50
+    },
+    "customMetrics": {
+      "searchResponseTime": {
+        "p95": 500
+      },
+      "propertyLoadTime": {
+        "p95": 1500
+      },
+      "leadCreationTime": {
+        "p95": 1000
+      }
+    }
+  },
+
+  "monitoring": {
+    "prometheus": {
+      "enabled": true,
+      "endpoint": "http://localhost:9090",
+      "metrics": [
+        "http_requests_total",
+        "http_request_duration_seconds",
+        "nodejs_heap_size_used_bytes",
+        "nodejs_heap_size_total_bytes",
+        "process_cpu_user_seconds_total",
+        "process_resident_memory_bytes"
+      ]
+    },
+
+    "grafana": {
+      "enabled": true,
+      "dashboard": "load-test-dashboard",
+      "panels": [
+        "response-times",
+        "error-rates",
+        "throughput",
+        "resource-usage",
+        "custom-metrics"
+      ]
+    },
+
+    "alerting": {
+      "slack": {
+        "enabled": true,
+        "webhook": "${SLACK_WEBHOOK_URL}",
+        "channels": ["#performance-alerts", "#devops"]
+      },
+      "email": {
+        "enabled": true,
+        "recipients": ["devops@real-estate-crm.com", "performance@real-estate-crm.com"]
+      }
+    }
+  },
+
+  "dataSetup": {
+    "testUsers": {
+      "count": 1000,
+      "distribution": {
+        "regularUsers": 0.7,
+        "agents": 0.2,
+        "admins": 0.1
+      }
+    },
+
+    "testProperties": {
+      "count": 5000,
+      "categories": {
+        "residential": 0.6,
+        "commercial": 0.25,
+        "land": 0.15
+      },
+      "priceRanges": {
+        "low": "0-200000",
+        "medium": "200000-500000",
+        "high": "500000-1000000",
+        "luxury": "1000000+"
+      }
+    },
+
+    "testDataGeneration": {
+      "enabled": true,
+      "cleanupAfterTest": true,
+      "anonymizeData": true
+    }
+  },
+
+  "reporting": {
+    "formats": ["json", "html", "junit", "csv"],
+    "outputDir": "./load-test-results",
+    "baselineComparison": {
+      "enabled": true,
+      "baselineFile": "./performance-baseline.json",
+      "regressionThreshold": 0.1
+    },
+    "customReports": {
+      "businessMetrics": {
+        "enabled": true,
+        "metrics": ["conversionRate", "leadGeneration", "userEngagement"]
+      },
+      "technicalMetrics": {
+        "enabled": true,
+        "metrics": ["responseTime", "errorRate", "throughput", "resourceUsage"]
+      }
+    }
+  },
+
+  "ci": {
+    "enabled": true,
+    "schedule": "0 2 * * 1-5",
+    "environments": ["staging"],
+    "failureHandling": {
+      "retryCount": 2,
+      "rollbackOnFailure": true,
+      "notifyOnFailure": true
+    },
+    "successCriteria": {
+      "responseTimeThreshold": 1000,
+      "errorRateThreshold": 0.05,
+      "coverageThreshold": 70
+    }
+  },
+
+  "security": {
+    "authentication": {
+      "enabled": true,
+      "tokenRefresh": true,
+      "sessionManagement": true
+    },
+    "dataProtection": {
+      "anonymizeRequests": true,
+      "sanitizeLogs": true,
+      "encryptSensitiveData": true
+    },
+    "rateLimiting": {
+      "enabled": true,
+      "requestsPerSecond": 100,
+      "burstLimit": 200
+    }
+  }
+}

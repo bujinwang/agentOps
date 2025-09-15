@@ -1,5 +1,14 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cmaApiService } from '../cmaApiService';
 import { CMAAPIResponse } from '../../types/cma';
+
+// Mock AsyncStorage
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+  multiRemove: jest.fn(),
+}));
 
 describe('CMA API Service', () => {
   beforeEach(() => {
@@ -8,6 +17,12 @@ describe('CMA API Service', () => {
       ok: true,
       json: jest.fn().mockResolvedValue({ success: true }),
     } as any);
+
+    // Reset AsyncStorage mocks
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
+    (AsyncStorage.removeItem as jest.Mock).mockResolvedValue(undefined);
+    (AsyncStorage.multiRemove as jest.Mock).mockResolvedValue(undefined);
   });
 
   describe('getCMAAnalyses', () => {
@@ -172,16 +187,8 @@ describe('CMA API Service', () => {
 
   describe('Authentication', () => {
     it('should include auth token in requests when available', async () => {
-      // Mock localStorage
-      const localStorageMock = {
-        getItem: jest.fn().mockReturnValue('mock-auth-token'),
-        setItem: jest.fn(),
-        removeItem: jest.fn(),
-      };
-      Object.defineProperty(window, 'localStorage', {
-        value: localStorageMock,
-        writable: true,
-      });
+      // Mock AsyncStorage to return stored token
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValue('mock-auth-token');
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
@@ -199,6 +206,76 @@ describe('CMA API Service', () => {
           }),
         })
       );
+    });
+
+    it('should handle missing auth token gracefully', async () => {
+      // Mock AsyncStorage to return null (no token)
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ success: true }),
+      } as any);
+
+      await cmaApiService.getCMAAnalyses();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+          }),
+        })
+      );
+
+      // Should not include Authorization header when no token
+      const callArgs = (global.fetch as jest.Mock).mock.calls[0][1];
+      expect(callArgs.headers.Authorization).toBeUndefined();
+    });
+  });
+
+  describe('Token Management', () => {
+    it('should securely store auth token', async () => {
+      const testToken = 'test-secure-token';
+
+      await cmaApiService.setAuthToken(testToken);
+
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith('@cma_auth_token', testToken);
+    });
+
+    it('should clear auth token securely', async () => {
+      await cmaApiService.clearAuthToken();
+
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith('@cma_auth_token');
+    });
+
+    it('should handle token storage errors gracefully', async () => {
+      (AsyncStorage.setItem as jest.Mock).mockRejectedValueOnce(new Error('Storage failed'));
+
+      await expect(cmaApiService.setAuthToken('test-token')).rejects.toThrow('Failed to securely store authentication token');
+    });
+  });
+
+  describe('Configuration Management', () => {
+    it('should set custom base URL', async () => {
+      const customUrl = 'https://api.production.com/webhook';
+
+      await cmaApiService.setBaseUrl(customUrl);
+
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith('@cma_base_url', customUrl);
+      expect(cmaApiService.getBaseUrl()).toBe(customUrl);
+    });
+
+    it('should validate URL format', async () => {
+      const invalidUrl = 'not-a-valid-url';
+
+      await expect(cmaApiService.setBaseUrl(invalidUrl)).rejects.toThrow('Invalid API URL format');
+    });
+
+    it('should reset to defaults', async () => {
+      await cmaApiService.resetToDefaults();
+
+      expect(AsyncStorage.multiRemove).toHaveBeenCalledWith(['@cma_base_url', '@cma_auth_token']);
     });
   });
 });

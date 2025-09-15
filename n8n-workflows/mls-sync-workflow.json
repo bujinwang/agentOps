@@ -1,0 +1,435 @@
+{
+  "name": "MLS Sync Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 60
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "mls/sync/status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Check Sync Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.status !== 'running' }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Is Sync Available",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mls/sync/start",
+        "responseMode": "responseNode",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "fullSync",
+              "value": "={{ $now.format('HH') === '02' }}"
+            },
+            {
+              "name": "validateData",
+              "value": true
+            },
+            {
+              "name": "skipDuplicates",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Start MLS Sync",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "mls/sync/progress/{{ $json.syncId }}",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Monitor Progress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.status === 'completed' || $json.status === 'failed' }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Is Sync Complete",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "mls/sync/errors",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Get Error Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1560,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notifications/send",
+        "responseMode": "responseNode",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "mls_sync_complete"
+            },
+            {
+              "name": "title",
+              "value": "MLS Sync Completed"
+            },
+            {
+              "name": "message",
+              "value": "={{ `MLS sync completed successfully. Processed ${$json.recordsProcessed} records, updated ${$json.recordsUpdated}, created ${$json.recordsCreated}.` }}"
+            },
+            {
+              "name": "priority",
+              "value": "normal"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Send Success Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1560,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notifications/send",
+        "responseMode": "responseNode",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "mls_sync_failed"
+            },
+            {
+              "name": "title",
+              "value": "MLS Sync Failed"
+            },
+            {
+              "name": "message",
+              "value": "={{ `MLS sync failed with ${$json.errors?.length || 0} errors. Check logs for details.` }}"
+            },
+            {
+              "name": "priority",
+              "value": "high"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Send Failure Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1780,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "logs/write",
+        "responseMode": "responseNode",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "level",
+              "value": "info"
+            },
+            {
+              "name": "message",
+              "value": "={{ `MLS sync completed: ${$json.status} - ${$json.recordsProcessed} records processed` }}"
+            },
+            {
+              "name": "metadata",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Log Completion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1780,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "name": "Wait Before Retry",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notifications/send",
+        "responseMode": "responseNode",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "mls_sync_waiting"
+            },
+            {
+              "name": "title",
+              "value": "MLS Sync Waiting"
+            },
+            {
+              "name": "message",
+              "value": "MLS sync is currently running. Will retry in 30 seconds."
+            },
+            {
+              "name": "priority",
+              "value": "low"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Send Waiting Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check Sync Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Sync Status": {
+      "main": [
+        [
+          {
+            "node": "Is Sync Available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Sync Available": {
+      "main": [
+        [
+          {
+            "node": "Start MLS Sync",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Waiting Notification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Start MLS Sync": {
+      "main": [
+        [
+          {
+            "node": "Monitor Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monitor Progress": {
+      "main": [
+        [
+          {
+            "node": "Is Sync Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Sync Complete": {
+      "main": [
+        [
+          {
+            "node": "Get Error Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Success Notification",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Send Failure Notification",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Get Error Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Log Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Failure Notification": {
+      "main": [
+        [
+          {
+            "node": "Log Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retry": {
+      "main": [
+        [
+          {
+            "node": "Check Sync Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Waiting Notification": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}

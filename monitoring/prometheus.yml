@@ -1,0 +1,83 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Real Estate CRM Backend
+  - job_name: 'real-estate-backend'
+    static_configs:
+      - targets: ['backend:3001']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    params:
+      format: ['prometheus']
+
+  # Real Estate CRM Frontend (if exposing metrics)
+  - job_name: 'real-estate-frontend'
+    static_configs:
+      - targets: ['frontend:3000']
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+
+  # PostgreSQL Database
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    scrape_interval: 30s
+
+  # Redis Cache
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # N8N Workflow Engine
+  - job_name: 'n8n'
+    static_configs:
+      - targets: ['n8n:5678']
+    scrape_interval: 30s
+
+  # Node.js Application Metrics (if using prom-client)
+  - job_name: 'nodejs-backend'
+    static_configs:
+      - targets: ['backend:3001']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Load Balancer/Reverse Proxy (if applicable)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+    scrape_interval: 30s
+
+  # System Metrics (Node Exporter)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # Custom Business Metrics
+  - job_name: 'business-metrics'
+    static_configs:
+      - targets: ['backend:3001']
+    scrape_interval: 60s
+    metrics_path: '/business-metrics'
+    params:
+      format: ['prometheus']
+
+  # Performance Test Metrics (during load testing)
+  - job_name: 'k6-load-test'
+    static_configs:
+      - targets: ['k6:6565']
+    scrape_interval: 5s
+    # Only active during load testing
+    # enable this job by setting the environment variable

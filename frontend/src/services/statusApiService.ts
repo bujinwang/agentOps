@@ -19,10 +19,13 @@ import {
 class StatusApiService {
   private baseUrl: string;
   private authToken: string | null = null;
+  private rateLimitMap: Map<string, number[]> = new Map();
 
-  constructor() {
-    this.baseUrl = 'http://localhost:5678/webhook';
-    this.authToken = localStorage.getItem('authToken');
+  constructor(baseUrl?: string) {
+    // Use environment variable or default, avoid hardcoded localhost
+    this.baseUrl = baseUrl || process.env.REACT_APP_API_BASE_URL || '/api';
+    // Use sessionStorage for better security (tokens expire on tab close)
+    this.authToken = sessionStorage.getItem('authToken');
   }
 
   private getHeaders(): HeadersInit {
@@ -35,6 +38,33 @@ class StatusApiService {
     }
 
     return headers;
+  }
+
+  /**
+   * Simple rate limiting to prevent abuse
+   */
+  private checkRateLimit(endpoint: string, maxRequests: number = 10, windowMs: number = 60000): boolean {
+    const now = Date.now();
+    const windowStart = now - windowMs;
+
+    if (!this.rateLimitMap.has(endpoint)) {
+      this.rateLimitMap.set(endpoint, []);
+    }
+
+    const requests = this.rateLimitMap.get(endpoint)!;
+
+    // Remove old requests outside the window
+    const validRequests = requests.filter(time => time > windowStart);
+
+    if (validRequests.length >= maxRequests) {
+      return false; // Rate limit exceeded
+    }
+
+    // Add current request
+    validRequests.push(now);
+    this.rateLimitMap.set(endpoint, validRequests);
+
+    return true;
   }
 
   private async handleResponse<T>(response: Response): Promise<StatusAPIResponse<T>> {
@@ -79,13 +109,25 @@ class StatusApiService {
   // Status Change Operations
 
   /**
-   * Change property status with validation
+   * Change property status with validation and rate limiting
    */
   async changePropertyStatus(
     propertyId: number,
     request: StatusChangeRequest
   ): Promise<StatusChangeResponse> {
     try {
+      // Apply rate limiting
+      if (!this.checkRateLimit('changePropertyStatus', 5, 60000)) {
+        return {
+          success: false,
+          error: {
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: 'Too many status change requests. Please wait before trying again.',
+            details: { retryAfter: 60 }
+          }
+        };
+      }
+
       const response = await fetch(`${this.baseUrl}/api/status/properties/${propertyId}/status`, {
         method: 'POST',
         headers: this.getHeaders(),

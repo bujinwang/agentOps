@@ -1,0 +1,112 @@
+{
+  "summary": {
+    "statements": {
+      "covered": 1250,
+      "total": 1500,
+      "percentage": 83
+    },
+    "branches": {
+      "covered": 180,
+      "total": 220,
+      "percentage": 82
+    },
+    "functions": {
+      "covered": 95,
+      "total": 110,
+      "percentage": 86
+    },
+    "lines": {
+      "covered": 1200,
+      "total": 1450,
+      "percentage": 83
+    },
+    "overall": {
+      "percentage": 84
+    }
+  },
+  "byFile": {
+    "services/leadScoreApiService.ts": {
+      "directory": "services",
+      "statements": { "covered": 45, "total": 50, "percentage": 90 },
+      "branches": { "covered": 12, "total": 15, "percentage": 80 },
+      "functions": { "covered": 8, "total": 9, "percentage": 89 },
+      "lines": { "covered": 42, "total": 47, "percentage": 89 },
+      "overall": 87
+    },
+    "services/conversionApiService.ts": {
+      "directory": "services",
+      "statements": { "covered": 38, "total": 45, "percentage": 84 },
+      "branches": { "covered": 8, "total": 10, "percentage": 80 },
+      "functions": { "covered": 6, "total": 7, "percentage": 86 },
+      "lines": { "covered": 35, "total": 42, "percentage": 83 },
+      "overall": 83
+    },
+    "components/ConversionTracker.tsx": {
+      "directory": "components",
+      "statements": { "covered": 25, "total": 35, "percentage": 71 },
+      "branches": { "covered": 5, "total": 8, "percentage": 63 },
+      "functions": { "covered": 4, "total": 5, "percentage": 80 },
+      "lines": { "covered": 22, "total": 32, "percentage": 69 },
+      "overall": 71
+    },
+    "hooks/useConversionTracking.ts": {
+      "directory": "hooks",
+      "statements": { "covered": 15, "total": 18, "percentage": 83 },
+      "branches": { "covered": 3, "total": 4, "percentage": 75 },
+      "functions": { "covered": 3, "total": 3, "percentage": 100 },
+      "lines": { "covered": 14, "total": 17, "percentage": 82 },
+      "overall": 85
+    }
+  },
+  "byDirectory": {
+    "services": {
+      "files": ["leadScoreApiService.ts", "conversionApiService.ts", "propertyApiService.ts"],
+      "statements": { "covered": 120, "total": 140, "percentage": 86 },
+      "branches": { "covered": 28, "total": 35, "percentage": 80 },
+      "functions": { "covered": 18, "total": 21, "percentage": 86 },
+      "lines": { "covered": 115, "total": 135, "percentage": 85 }
+    },
+    "components": {
+      "files": ["ConversionTracker.tsx", "ConversionFunnel.tsx"],
+      "statements": { "covered": 45, "total": 65, "percentage": 69 },
+      "branches": { "covered": 10, "total": 16, "percentage": 63 },
+      "functions": { "covered": 8, "total": 12, "percentage": 67 },
+      "lines": { "covered": 40, "total": 60, "percentage": 67 }
+    },
+    "hooks": {
+      "files": ["useConversionTracking.ts", "useLeadAnalytics.ts"],
+      "statements": { "covered": 28, "total": 35, "percentage": 80 },
+      "branches": { "covered": 6, "total": 8, "percentage": 75 },
+      "functions": { "covered": 6, "total": 7, "percentage": 86 },
+      "lines": { "covered": 25, "total": 32, "percentage": 78 }
+    }
+  },
+  "uncoveredLines": {
+    "components/ConversionTracker.tsx": [
+      { "line": 45, "type": "statement", "code": "if (userRole === 'admin') {" },
+      { "line": 67, "type": "statement", "code": "console.log('Conversion tracked');" }
+    ]
+  },
+  "recommendations": [
+    {
+      "type": "file",
+      "file": "components/ConversionTracker.tsx",
+      "coverage": 71,
+      "priority": "medium",
+      "suggestion": "Add tests for admin role handling and logging statements"
+    },
+    {
+      "type": "threshold",
+      "metric": "branches",
+      "current": 82,
+      "target": 70,
+      "priority": "low",
+      "suggestion": "Branch coverage meets target at 82%"
+    }
+  ],
+  "metadata": {
+    "generatedAt": "2025-09-14T22:56:51.041Z",
+    "totalFiles": 15,
+    "testCommand": "npm run test:coverage"
+  }
+}

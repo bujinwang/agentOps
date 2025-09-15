@@ -26,15 +26,30 @@ export class SearchAPIService {
   }
 
   /**
-   * Execute property search
+   * Execute property search with performance monitoring
    */
   async searchProperties(query: PropertySearchQuery): Promise<SearchResult> {
+    const startTime = performance.now();
+
     try {
-      const response = await this.makeRequest<SearchResult>('POST', '/properties', query);
+      // Validate query for security
+      const validation = this.validateSearchQuery(query);
+      if (!validation.isValid) {
+        throw new Error(`Invalid search query: ${validation.errors.join(', ')}`);
+      }
+
+      // Sanitize query parameters to prevent injection
+      const sanitizedQuery = this.sanitizeSearchQuery(query);
+
+      const response = await this.makeRequest<SearchResult>('POST', '/properties', sanitizedQuery);
 
       if (!response.success || !response.data) {
         throw new Error(response.error?.message || 'Search failed');
       }
+
+      // Log performance metrics
+      const executionTime = performance.now() - startTime;
+      this.logSearchPerformance(query, executionTime, response.meta);
 
       return response.data;
     } catch (error) {
@@ -239,6 +254,92 @@ export class SearchAPIService {
       console.error('Get location suggestions API error:', error);
       return [];
     }
+  }
+
+  /**
+   * Sanitize search query parameters to prevent injection attacks
+   */
+  private sanitizeSearchQuery(query: PropertySearchQuery): PropertySearchQuery {
+    const sanitized = { ...query };
+
+    // Sanitize string fields
+    if (sanitized.query) {
+      sanitized.query = sanitized.query.replace(/[<>'"&]/g, '');
+    }
+
+    if (sanitized.location) {
+      if (sanitized.location.address) {
+        sanitized.location.address = sanitized.location.address.replace(/[<>'"&]/g, '');
+      }
+      if (sanitized.location.city) {
+        sanitized.location.city = sanitized.location.city.replace(/[<>'"&]/g, '');
+      }
+      if (sanitized.location.state) {
+        sanitized.location.state = sanitized.location.state.replace(/[<>'"&]/g, '');
+      }
+      if (sanitized.location.zipCode) {
+        sanitized.location.zipCode = sanitized.location.zipCode.replace(/[^0-9-]/g, '');
+      }
+    }
+
+    // Ensure numeric fields are properly typed
+    if (sanitized.priceRange) {
+      if (sanitized.priceRange.min !== undefined) {
+        sanitized.priceRange.min = Math.max(0, Math.floor(Number(sanitized.priceRange.min)));
+      }
+      if (sanitized.priceRange.max !== undefined) {
+        sanitized.priceRange.max = Math.max(0, Math.floor(Number(sanitized.priceRange.max)));
+      }
+    }
+
+    // Sanitize arrays
+    if (sanitized.propertyTypes) {
+      sanitized.propertyTypes = sanitized.propertyTypes.map(type => type.replace(/[<>'"&]/g, ''));
+    }
+
+    if (sanitized.features) {
+      sanitized.features = sanitized.features.map(feature => feature.replace(/[<>'"&]/g, ''));
+    }
+
+    return sanitized;
+  }
+
+  /**
+   * Log search performance metrics
+   */
+  private logSearchPerformance(query: PropertySearchQuery, executionTime: number, meta?: any): void {
+    const metrics = {
+      timestamp: new Date().toISOString(),
+      executionTime: Math.round(executionTime),
+      queryType: query.query ? 'text' : 'filters',
+      hasLocation: !!query.location,
+      hasPriceRange: !!query.priceRange,
+      filterCount: this.countFilters(query),
+      cacheHit: meta?.cacheHit || false,
+      totalQueries: meta?.totalQueries || 0
+    };
+
+    console.log('Search Performance:', metrics);
+
+    // In production, this would send to monitoring service
+    // this.monitoringService.track('search.performance', metrics);
+  }
+
+  /**
+   * Count active filters in query
+   */
+  private countFilters(query: PropertySearchQuery): number {
+    let count = 0;
+    if (query.location) count++;
+    if (query.priceRange) count++;
+    if (query.propertyTypes?.length) count++;
+    if (query.bedrooms) count++;
+    if (query.bathrooms) count++;
+    if (query.squareFeet) count++;
+    if (query.yearBuilt) count++;
+    if (query.features?.length) count++;
+    if (query.mlsStatus?.length) count++;
+    return count;
   }
 
   /**
