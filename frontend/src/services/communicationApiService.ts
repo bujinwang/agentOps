@@ -496,6 +496,64 @@ class CommunicationApiService {
     }
   }
 
+  // Communication Methods for Workflow Execution
+
+  async sendEmail(email: string, templateId: string, context: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/communication/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: email,
+          templateId,
+          context
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to send email'
+      };
+    }
+  }
+
+  async sendSMS(phone: string, templateId: string, context: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/communication/send-sms`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: phone,
+          templateId,
+          context
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to send SMS'
+      };
+    }
+  }
+
   // Workflow Integration
 
   async getWorkflows(): Promise<ApiResponse<CommunicationWorkflow[]>> {

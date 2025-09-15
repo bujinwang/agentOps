@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ConversionEvent,
   ConversionTimeline,
@@ -7,295 +7,291 @@ import {
   ConversionEventTemplate,
   CONVERSION_EVENT_TEMPLATES
 } from '../types/conversion';
-import { conversionApiService, ConversionEventData, ConversionStatusUpdate } from '../services/conversionApiService';
+import { conversionTrackingService } from '../services/conversionTrackingService';
+import { conversionMetricsService, FunnelAnalytics } from '../services/conversionMetricsService';
 
-interface UseConversionTrackingOptions {
-  leadId?: number;
-  autoRefresh?: boolean;
-  refreshInterval?: number;
+export interface UseConversionTrackingOptions {
+  enableRealTimeUpdates?: boolean;
+  autoRefreshInterval?: number; // in milliseconds
+  cacheResults?: boolean;
 }
 
-interface ConversionTrackingState {
-  timeline: ConversionTimeline | null;
+export interface ConversionTrackingState {
+  // Core data
   funnelData: ConversionFunnelData | null;
   metrics: ConversionMetrics | null;
-  isLoading: boolean;
-  error: string | null;
+  analytics: FunnelAnalytics | null;
+
+  // Loading states
+  isLoadingFunnel: boolean;
+  isLoadingMetrics: boolean;
+  isLoadingAnalytics: boolean;
+
+  // Error states
+  funnelError: string | null;
+  metricsError: string | null;
+  analyticsError: string | null;
+
+  // Real-time updates
   lastUpdated: Date | null;
+  isRealTimeEnabled: boolean;
+}
+
+export interface ConversionTrackingActions {
+  // Event logging
+  logConversionEvent: (
+    leadId: number,
+    eventType: ConversionEvent['eventType'],
+    eventDescription: string,
+    eventData?: Record<string, any>,
+    userId?: number
+  ) => Promise<{ success: boolean; eventId?: number; newStage?: string; error?: string }>;
+
+  // Data fetching
+  refreshFunnelData: () => Promise<void>;
+  refreshMetrics: (dateRange?: { start: string; end: string }) => Promise<void>;
+  refreshAnalytics: () => Promise<void>;
+  refreshAll: () => Promise<void>;
+
+  // Configuration
+  updateRealTimeEnabled: (enabled: boolean) => void;
+  updateRefreshInterval: (interval: number) => void;
+
+  // Utility
+  getEventTemplate: (eventType: string) => ConversionEventTemplate | undefined;
+  getAvailableEventTypes: () => ConversionEventTemplate[];
 }
 
 export const useConversionTracking = (options: UseConversionTrackingOptions = {}) => {
-  const { leadId, autoRefresh = false, refreshInterval = 30000 } = options;
+  const {
+    enableRealTimeUpdates = true,
+    autoRefreshInterval = 30000, // 30 seconds
+    cacheResults = true
+  } = options;
 
+  // State management
   const [state, setState] = useState<ConversionTrackingState>({
-    timeline: null,
     funnelData: null,
     metrics: null,
-    isLoading: false,
-    error: null,
-    lastUpdated: null
+    analytics: null,
+    isLoadingFunnel: false,
+    isLoadingMetrics: false,
+    isLoadingAnalytics: false,
+    funnelError: null,
+    metricsError: null,
+    analyticsError: null,
+    lastUpdated: null,
+    isRealTimeEnabled: enableRealTimeUpdates
   });
 
-  // Load conversion timeline for a specific lead
-  const loadTimeline = useCallback(async (targetLeadId?: number) => {
-    const id = targetLeadId || leadId;
-    if (!id) return;
+  // Refs for cleanup and timers
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
 
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
-
-    try {
-      const response = await conversionApiService.getConversionTimeline(id);
-      if (response.success && response.data) {
-        setState(prev => ({
-          ...prev,
-          timeline: response.data!,
-          isLoading: false,
-          lastUpdated: new Date()
-        }));
-      } else {
-        setState(prev => ({
-          ...prev,
-          error: response.message,
-          isLoading: false
-        }));
-      }
-    } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to load timeline',
-        isLoading: false
-      }));
+  // Update state helper
+  const updateState = useCallback((updates: Partial<ConversionTrackingState>) => {
+    if (isMountedRef.current) {
+      setState(prev => ({ ...prev, ...updates }));
     }
-  }, [leadId]);
+  }, []);
 
-  // Load conversion funnel analytics
+  // Load funnel data
   const loadFunnelData = useCallback(async () => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    updateState({ isLoadingFunnel: true, funnelError: null });
 
     try {
-      const response = await conversionApiService.getConversionFunnel();
-      if (response.success && response.data) {
-        setState(prev => ({
-          ...prev,
-          funnelData: response.data!,
-          isLoading: false,
+      const funnelData = await conversionTrackingService.calculateConversionFunnel();
+
+      if (isMountedRef.current) {
+        updateState({
+          funnelData,
+          isLoadingFunnel: false,
           lastUpdated: new Date()
-        }));
-      } else {
-        setState(prev => ({
-          ...prev,
-          error: response.message,
-          isLoading: false
-        }));
+        });
       }
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to load funnel data',
-        isLoading: false
-      }));
+      console.error('Failed to load funnel data:', error);
+      updateState({
+        funnelError: error instanceof Error ? error.message : 'Failed to load funnel data',
+        isLoadingFunnel: false
+      });
     }
-  }, []);
+  }, [updateState]);
 
-  // Load conversion metrics
-  const loadMetrics = useCallback(async (dateRange?: { start: string; end: string }) => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
+  // Load metrics data
+  const loadMetricsData = useCallback(async (dateRange?: { start: string; end: string }) => {
+    updateState({ isLoadingMetrics: true, metricsError: null });
 
     try {
-      const response = await conversionApiService.getConversionMetrics(dateRange);
-      if (response.success && response.data) {
-        setState(prev => ({
-          ...prev,
-          metrics: {
-            ...response.data!,
-            conversionTrends: (response.data! as any).conversionTrends || [],
-            topConversionStages: (response.data!.topConversionStages || []).map((stage: any) => ({
-              ...stage,
-              percentage: stage.percentage || 0
-            }))
-          } as ConversionMetrics,
-          isLoading: false,
+      const metrics = await conversionTrackingService.getConversionMetrics(dateRange);
+
+      if (isMountedRef.current) {
+        updateState({
+          metrics,
+          isLoadingMetrics: false,
           lastUpdated: new Date()
-        }));
-      } else {
-        setState(prev => ({
-          ...prev,
-          error: response.message,
-          isLoading: false
-        }));
+        });
       }
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to load metrics',
-        isLoading: false
-      }));
+      console.error('Failed to load metrics data:', error);
+      updateState({
+        metricsError: error instanceof Error ? error.message : 'Failed to load metrics data',
+        isLoadingMetrics: false
+      });
     }
-  }, []);
+  }, [updateState]);
 
-  // Log a conversion event
-  const logEvent = useCallback(async (
-    eventData: ConversionEventData,
-    targetLeadId?: number
-  ) => {
-    const id = targetLeadId || leadId;
-    if (!id) {
-      setState(prev => ({
-        ...prev,
-        error: 'No lead ID provided for event logging'
-      }));
-      return null;
-    }
-
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
+  // Load analytics data
+  const loadAnalyticsData = useCallback(async () => {
+    updateState({ isLoadingAnalytics: true, analyticsError: null });
 
     try {
-      const response = await conversionApiService.logConversionEvent(id, eventData);
-      if (response.success) {
-        // Refresh timeline after logging event
-        await loadTimeline(id);
-        setState(prev => ({ ...prev, isLoading: false }));
-        return response.data;
-      } else {
-        setState(prev => ({
-          ...prev,
-          error: response.message,
-          isLoading: false
-        }));
-        return null;
+      const analytics = await conversionMetricsService.calculateFunnelAnalytics();
+
+      if (isMountedRef.current) {
+        updateState({
+          analytics,
+          isLoadingAnalytics: false,
+          lastUpdated: new Date()
+        });
       }
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to log event',
-        isLoading: false
-      }));
-      return null;
+      console.error('Failed to load analytics data:', error);
+      updateState({
+        analyticsError: error instanceof Error ? error.message : 'Failed to load analytics data',
+        isLoadingAnalytics: false
+      });
     }
-  }, [leadId, loadTimeline]);
+  }, [updateState]);
 
-  // Update conversion status
-  const updateStatus = useCallback(async (
-    statusUpdate: ConversionStatusUpdate,
-    targetLeadId?: number
+  // Log conversion event
+  const logConversionEvent = useCallback(async (
+    leadId: number,
+    eventType: ConversionEvent['eventType'],
+    eventDescription: string,
+    eventData?: Record<string, any>,
+    userId?: number
   ) => {
-    const id = targetLeadId || leadId;
-    if (!id) {
-      setState(prev => ({
-        ...prev,
-        error: 'No lead ID provided for status update'
-      }));
-      return false;
-    }
-
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
-
     try {
-      const response = await conversionApiService.updateConversionStatus(id, statusUpdate);
-      if (response.success) {
-        // Refresh timeline after status update
-        await loadTimeline(id);
-        setState(prev => ({ ...prev, isLoading: false }));
-        return true;
-      } else {
-        setState(prev => ({
-          ...prev,
-          error: response.message,
-          isLoading: false
-        }));
-        return false;
+      const result = await conversionTrackingService.logConversionEvent(
+        leadId,
+        eventType,
+        eventDescription,
+        eventData,
+        userId
+      );
+
+      // Refresh data after successful event logging
+      if (result.success) {
+        await Promise.all([
+          loadFunnelData(),
+          loadMetricsData(),
+          loadAnalyticsData()
+        ]);
       }
+
+      return result;
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to update status',
-        isLoading: false
-      }));
-      return false;
+      console.error('Failed to log conversion event:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to log conversion event'
+      };
     }
-  }, [leadId, loadTimeline]);
-
-  // Batch log multiple events
-  const batchLogEvents = useCallback(async (
-    events: Array<{ leadId: number; eventData: ConversionEventData }>
-  ) => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
-
-    try {
-      const response = await conversionApiService.batchLogConversionEvents(events);
-      if (response.success) {
-        // Refresh data after batch logging
-        if (leadId) await loadTimeline(leadId);
-        setState(prev => ({ ...prev, isLoading: false }));
-        return response.data;
-      } else {
-        setState(prev => ({
-          ...prev,
-          error: response.message,
-          isLoading: false
-        }));
-        return null;
-      }
-    } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to batch log events',
-        isLoading: false
-      }));
-      return null;
-    }
-  }, [leadId, loadTimeline]);
-
-  // Clear error state
-  const clearError = useCallback(() => {
-    setState(prev => ({ ...prev, error: null }));
-  }, []);
+  }, [loadFunnelData, loadMetricsData, loadAnalyticsData]);
 
   // Refresh all data
-  const refresh = useCallback(async () => {
-    if (leadId) await loadTimeline(leadId);
-    await loadFunnelData();
-    await loadMetrics();
-  }, [leadId, loadTimeline, loadFunnelData, loadMetrics]);
+  const refreshAll = useCallback(async () => {
+    await Promise.all([
+      loadFunnelData(),
+      loadMetricsData(),
+      loadAnalyticsData()
+    ]);
+  }, [loadFunnelData, loadMetricsData, loadAnalyticsData]);
 
-  // Auto-refresh effect
-  useEffect(() => {
-    if (!autoRefresh) return;
-
-    const interval = setInterval(() => {
-      refresh();
-    }, refreshInterval);
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, refresh]);
-
-  // Initial load
-  useEffect(() => {
-    if (leadId) {
-      loadTimeline(leadId);
+  // Setup auto-refresh timer
+  const setupAutoRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearInterval(refreshTimerRef.current);
     }
-    loadFunnelData();
-    loadMetrics();
-  }, [leadId, loadTimeline, loadFunnelData, loadMetrics]);
+
+    if (state.isRealTimeEnabled && autoRefreshInterval > 0) {
+      refreshTimerRef.current = setInterval(() => {
+        refreshAll();
+      }, autoRefreshInterval);
+    }
+  }, [state.isRealTimeEnabled, autoRefreshInterval, refreshAll]);
+
+  // Update real-time enabled state
+  const updateRealTimeEnabled = useCallback((enabled: boolean) => {
+    updateState({ isRealTimeEnabled: enabled });
+  }, [updateState]);
+
+  // Update refresh interval
+  const updateRefreshInterval = useCallback((interval: number) => {
+    if (refreshTimerRef.current) {
+      clearInterval(refreshTimerRef.current);
+    }
+
+    if (state.isRealTimeEnabled && interval > 0) {
+      refreshTimerRef.current = setInterval(() => {
+        refreshAll();
+      }, interval);
+    }
+  }, [state.isRealTimeEnabled, refreshAll]);
+
+  // Get event template by type
+  const getEventTemplate = useCallback((eventType: string): ConversionEventTemplate | undefined => {
+    return CONVERSION_EVENT_TEMPLATES.find(template => template.type === eventType);
+  }, []);
+
+  // Get all available event types
+  const getAvailableEventTypes = useCallback((): ConversionEventTemplate[] => {
+    return CONVERSION_EVENT_TEMPLATES;
+  }, []);
+
+  // Initial data load
+  useEffect(() => {
+    refreshAll();
+  }, []); // Only run once on mount
+
+  // Setup auto-refresh when real-time settings change
+  useEffect(() => {
+    setupAutoRefresh();
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearInterval(refreshTimerRef.current);
+      }
+    };
+  }, [setupAutoRefresh]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (refreshTimerRef.current) {
+        clearInterval(refreshTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Actions object
+  const actions: ConversionTrackingActions = {
+    logConversionEvent,
+    refreshFunnelData: loadFunnelData,
+    refreshMetrics: loadMetricsData,
+    refreshAnalytics: loadAnalyticsData,
+    refreshAll,
+    updateRealTimeEnabled,
+    updateRefreshInterval,
+    getEventTemplate,
+    getAvailableEventTypes
+  };
 
   return {
-    // State
     ...state,
-
-    // Actions
-    loadTimeline,
-    loadFunnelData,
-    loadMetrics,
-    logEvent,
-    updateStatus,
-    batchLogEvents,
-    clearError,
-    refresh,
-
-    // Utilities
-    eventTemplates: CONVERSION_EVENT_TEMPLATES,
-    getEventTemplate: (type: ConversionEvent['eventType']) =>
-      CONVERSION_EVENT_TEMPLATES.find(template => template.type === type)
+    ...actions
   };
 };
 

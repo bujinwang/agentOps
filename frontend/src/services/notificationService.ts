@@ -264,6 +264,73 @@ class NotificationService {
     }
   }
 
+  // Workflow execution methods
+
+  public async sendInAppNotification(
+    leadId: number,
+    templateId: string,
+    context: any
+  ): Promise<void> {
+    try {
+      // Extract lead name from context or use default
+      const leadName = context?.name || context?.leadName || `Lead ${leadId}`;
+
+      // Create notification based on template type
+      const notificationType = this.determineNotificationType(templateId);
+
+      switch (notificationType) {
+        case 'milestone':
+          this.addMilestoneNotification(
+            leadId,
+            leadName,
+            context?.milestone || 'Workflow Step',
+            context?.message || 'Automated workflow notification'
+          );
+          break;
+
+        case 'followup':
+          this.addTimeWarningNotification(
+            leadId,
+            leadName,
+            context?.daysInStage || 1,
+            context?.stage || 'follow-up'
+          );
+          break;
+
+        case 'alert':
+          this.addProbabilityAlertNotification(
+            leadId,
+            leadName,
+            context?.probability || 0.5,
+            context?.change || 'increased'
+          );
+          break;
+
+        default:
+          // Generic notification
+          this.addNotification({
+            leadId,
+            leadName,
+            type: 'alert',
+            title: context?.title || 'Workflow Notification',
+            message: context?.message || 'Automated workflow message',
+            actionRequired: false
+          });
+      }
+    } catch (error) {
+      console.error('Error sending in-app notification:', error);
+      throw error;
+    }
+  }
+
+  private determineNotificationType(templateId: string): string {
+    // Determine notification type based on template ID
+    if (templateId.includes('milestone')) return 'milestone';
+    if (templateId.includes('followup') || templateId.includes('reminder')) return 'followup';
+    if (templateId.includes('alert') || templateId.includes('urgent')) return 'alert';
+    return 'info';
+  }
+
   // Cleanup method
   public cleanup(): void {
     this.listeners = [];
