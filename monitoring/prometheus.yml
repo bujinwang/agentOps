@@ -1,83 +1,110 @@
+# Prometheus Configuration for Real Estate CRM
+# Production-ready monitoring configuration
+
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  scrape_timeout: 10s
 
 rule_files:
-  # - "first_rules.yml"
-  # - "second_rules.yml"
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # Add alertmanager targets here if needed
+          # - alertmanager:9093
 
 scrape_configs:
-  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
-  - job_name: 'prometheus'
+  # Application Metrics
+  - job_name: 'real-estate-crm-backend'
     static_configs:
-      - targets: ['localhost:9090']
-
-  # Real Estate CRM Backend
-  - job_name: 'real-estate-backend'
-    static_configs:
-      - targets: ['backend:3001']
-    scrape_interval: 10s
+      - targets: ['backend:3000']
     metrics_path: '/metrics'
-    params:
-      format: ['prometheus']
-
-  # Real Estate CRM Frontend (if exposing metrics)
-  - job_name: 'real-estate-frontend'
-    static_configs:
-      - targets: ['frontend:3000']
-    scrape_interval: 30s
-    metrics_path: '/metrics'
-
-  # PostgreSQL Database
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres:5432']
-    scrape_interval: 30s
-
-  # Redis Cache
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis:6379']
-    scrape_interval: 30s
-
-  # N8N Workflow Engine
-  - job_name: 'n8n'
-    static_configs:
-      - targets: ['n8n:5678']
-    scrape_interval: 30s
-
-  # Node.js Application Metrics (if using prom-client)
-  - job_name: 'nodejs-backend'
-    static_configs:
-      - targets: ['backend:3001']
     scrape_interval: 15s
-    metrics_path: '/metrics'
+    scrape_timeout: 10s
+    # Labels for identification
+    labels:
+      service: 'real-estate-crm'
+      component: 'backend'
+      environment: 'production'
 
-  # Load Balancer/Reverse Proxy (if applicable)
-  - job_name: 'nginx'
-    static_configs:
-      - targets: ['nginx:80']
-    scrape_interval: 30s
-
-  # System Metrics (Node Exporter)
+  # Node Exporter (if running on host)
   - job_name: 'node-exporter'
     static_configs:
-      - targets: ['node-exporter:9100']
+      - targets: ['host.docker.internal:9100']
     scrape_interval: 30s
+    labels:
+      service: 'node-exporter'
+      environment: 'production'
+
+  # PostgreSQL Exporter
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+    labels:
+      service: 'postgresql'
+      component: 'database'
+      environment: 'production'
+
+  # Redis Exporter
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+    labels:
+      service: 'redis'
+      component: 'cache'
+      environment: 'production'
+
+  # Nginx Exporter
+  - job_name: 'nginx-exporter'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+    scrape_interval: 30s
+    labels:
+      service: 'nginx'
+      component: 'proxy'
+      environment: 'production'
+
+  # Docker Container Metrics
+  - job_name: 'docker-containers'
+    static_configs:
+      - targets: ['host.docker.internal:9323']
+    scrape_interval: 30s
+    labels:
+      service: 'docker'
+      environment: 'production'
 
   # Custom Business Metrics
   - job_name: 'business-metrics'
     static_configs:
-      - targets: ['backend:3001']
+      - targets: ['backend:3000']
+    metrics_path: '/api/performance/metrics'
     scrape_interval: 60s
-    metrics_path: '/business-metrics'
-    params:
-      format: ['prometheus']
+    scrape_timeout: 30s
+    labels:
+      service: 'real-estate-crm'
+      component: 'business-metrics'
+      environment: 'production'
 
-  # Performance Test Metrics (during load testing)
-  - job_name: 'k6-load-test'
-    static_configs:
-      - targets: ['k6:6565']
-    scrape_interval: 5s
-    # Only active during load testing
-    # enable this job by setting the environment variable
+# Remote write configuration (for long-term storage)
+remote_write:
+  - url: "http://victoriametrics:8428/api/v1/write"  # Example: VictoriaMetrics
+    # remote_timeout: 30s
+    # queue_config:
+    #   capacity: 10000
+    #   max_shards: 30
+    #   min_shards: 1
+    #   max_samples_per_send: 1000
+    #   batch_send_deadline: 5s
+    #   min_backoff: 30ms
+    #   max_backoff: 5s
+
+# Remote read configuration
+remote_read:
+  - url: "http://victoriametrics:8428/api/v1/read"
+    # remote_timeout: 30s
+    # read_recent: true

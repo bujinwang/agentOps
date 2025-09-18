@@ -1,4 +1,4 @@
-const pool = require('../config/database');
+const { getDatabase } = require('../config/database');
 
 class ConversionService {
   /**
@@ -12,7 +12,8 @@ class ConversionService {
       ORDER BY stage_order
     `;
 
-    const result = await pool.query(query);
+    const db = getDatabase();
+    const result = await db.query(query);
     return result.rows;
   }
 
@@ -20,7 +21,8 @@ class ConversionService {
    * Update lead conversion stage
    */
   async updateLeadStage(leadId, stageId, userId, notes = null) {
-    const client = await pool.connect();
+    const db = getDatabase();
+    const client = await db.connect();
 
     try {
       await client.query('BEGIN');
@@ -110,7 +112,8 @@ class ConversionService {
       RETURNING *
     `;
 
-    const result = await pool.query(updateQuery, [probability, leadId]);
+    const db = getDatabase();
+    const result = await db.query(updateQuery, [probability, leadId]);
     const updatedLead = result.rows[0];
 
     if (updatedLead) {
@@ -127,7 +130,7 @@ class ConversionService {
         timestamp: new Date().toISOString()
       };
 
-      await pool.query(eventQuery, [
+      await db.query(eventQuery, [
         leadId,
         userId,
         'probability_update',
@@ -168,7 +171,8 @@ class ConversionService {
       ORDER BY cs.stage_order
     `;
 
-    const result = await pool.query(query, params);
+    const db = getDatabase();
+    const result = await db.query(query, params);
     return result.rows;
   }
 
@@ -195,7 +199,8 @@ class ConversionService {
       ORDER BY ce.created_at DESC
     `;
 
-    const result = await pool.query(query, [leadId]);
+    const db = getDatabase();
+    const result = await db.query(query, [leadId]);
     return result.rows;
   }
 
@@ -220,7 +225,8 @@ class ConversionService {
         AND DATE(created_at) <= $2
     `;
 
-    const metricsResult = await pool.query(metricsQuery, [userId, targetDate]);
+    const db = getDatabase();
+    const metricsResult = await db.query(metricsQuery, [userId, targetDate]);
     const metrics = metricsResult.rows[0];
 
     // Calculate conversion rate
@@ -247,7 +253,7 @@ class ConversionService {
         updated_at = CURRENT_TIMESTAMP
     `;
 
-    await pool.query(upsertQuery, [
+    await db.query(upsertQuery, [
       userId,
       targetDate,
       metrics.total_leads || 0,
@@ -279,7 +285,8 @@ class ConversionService {
       ORDER BY metric_date
     `;
 
-    const result = await pool.query(query, [userId, startDate, endDate]);
+    const db = getDatabase();
+    const result = await db.query(query, [userId, startDate, endDate]);
     return result.rows;
   }
 
@@ -314,7 +321,8 @@ class ConversionService {
       ORDER BY l.updated_at DESC
     `;
 
-    const result = await pool.query(query, params);
+    const db = getDatabase();
+    const result = await db.query(query, params);
     return result.rows;
   }
 }

@@ -44,13 +44,13 @@ CREATE INDEX IF NOT EXISTS idx_ml_models_accuracy ON ml_models(accuracy DESC);
 -- =====================================================
 
 CREATE TABLE IF NOT EXISTS lead_features (
-    lead_id INTEGER PRIMARY KEY REFERENCES leads(id) ON DELETE CASCADE,
+    lead_id INTEGER PRIMARY KEY REFERENCES leads(lead_id) ON DELETE CASCADE,
     features JSONB NOT NULL, -- Feature vector as JSON
     feature_version VARCHAR(50) NOT NULL DEFAULT '1.0.0',
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     source VARCHAR(100) NOT NULL DEFAULT 'ml_pipeline', -- Source of feature extraction
 
-    CONSTRAINT chk_features_not_empty CHECK (jsonb_object_length(features) > 0)
+    CONSTRAINT chk_features_not_empty CHECK (features != '{}'::jsonb)
 );
 
 -- Indexes for lead features
@@ -68,7 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_lead_features_gin ON lead_features USING GIN (fea
 
 CREATE TABLE IF NOT EXISTS lead_scores (
     id SERIAL PRIMARY KEY,
-    lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    lead_id INTEGER NOT NULL REFERENCES leads(lead_id) ON DELETE CASCADE,
     score DECIMAL(3,2) NOT NULL, -- 0.00 to 1.00 (conversion probability)
     score_type VARCHAR(50) NOT NULL DEFAULT 'ml', -- 'ml', 'rule_based', 'manual'
     confidence DECIMAL(3,2), -- 0.00 to 1.00 (model confidence)
@@ -170,7 +170,7 @@ SELECT DISTINCT ON (lead_id)
     l.email,
     l.created_at as lead_created_at
 FROM lead_scores ls
-JOIN leads l ON ls.lead_id = l.id
+JOIN leads l ON ls.lead_id = l.lead_id
 ORDER BY lead_id, scored_at DESC;
 
 -- View for model performance summary

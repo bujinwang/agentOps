@@ -1,0 +1,252 @@
+# Prometheus Alert Rules for Real Estate CRM
+# Production-ready alerting rules
+
+groups:
+  # Application Performance Alerts
+  - name: application_performance
+    rules:
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: real-estate-crm
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s for the last 5 minutes"
+          runbook_url: "https://docs.your-domain.com/runbooks/high-response-time"
+
+      - alert: CriticalResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: real-estate-crm
+        annotations:
+          summary: "Critical response time detected"
+          description: "95th percentile response time is {{ $value }}s for the last 2 minutes"
+          runbook_url: "https://docs.your-domain.com/runbooks/critical-response-time"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: real-estate-crm
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes"
+          runbook_url: "https://docs.your-domain.com/runbooks/high-error-rate"
+
+      - alert: CriticalErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.10
+        for: 2m
+        labels:
+          severity: critical
+          service: real-estate-crm
+        annotations:
+          summary: "Critical error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for the last 2 minutes"
+          runbook_url: "https://docs.your-domain.com/runbooks/critical-error-rate"
+
+  # System Resource Alerts
+  - name: system_resources
+    rules:
+      - alert: HighMemoryUsage
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
+          runbook_url: "https://docs.your-domain.com/runbooks/high-memory-usage"
+
+      - alert: CriticalMemoryUsage
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Critical memory usage detected"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
+          runbook_url: "https://docs.your-domain.com/runbooks/critical-memory-usage"
+
+      - alert: HighCPUUsage
+        expr: (1 - rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+          runbook_url: "https://docs.your-domain.com/runbooks/high-cpu-usage"
+
+      - alert: CriticalCPUUsage
+        expr: (1 - rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Critical CPU usage detected"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+          runbook_url: "https://docs.your-domain.com/runbooks/critical-cpu-usage"
+
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 10
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "Low disk space detected"
+          description: "Disk space is {{ $value }}% available on {{ $labels.instance }}"
+          runbook_url: "https://docs.your-domain.com/runbooks/low-disk-space"
+
+  # Database Alerts
+  - name: database_alerts
+    rules:
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been down for more than 1 minute"
+          runbook_url: "https://docs.your-domain.com/runbooks/postgresql-down"
+
+      - alert: PostgreSQLHighConnections
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "High PostgreSQL connection count"
+          description: "PostgreSQL has {{ $value }} active connections"
+          runbook_url: "https://docs.your-domain.com/runbooks/postgresql-high-connections"
+
+      - alert: PostgreSQLSlowQueries
+        expr: rate(pg_stat_activity_max_tx_duration[5m]) > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "Slow PostgreSQL queries detected"
+          description: "PostgreSQL has slow queries running for more than 30 seconds"
+          runbook_url: "https://docs.your-domain.com/runbooks/postgresql-slow-queries"
+
+  # Cache Alerts
+  - name: cache_alerts
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been down for more than 1 minute"
+          runbook_url: "https://docs.your-domain.com/runbooks/redis-down"
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "High Redis memory usage"
+          description: "Redis memory usage is {{ $value }}%"
+          runbook_url: "https://docs.your-domain.com/runbooks/redis-high-memory"
+
+      - alert: RedisHighConnections
+        expr: redis_connected_clients > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "High Redis connection count"
+          description: "Redis has {{ $value }} connected clients"
+          runbook_url: "https://docs.your-domain.com/runbooks/redis-high-connections"
+
+  # Business Logic Alerts
+  - name: business_alerts
+    rules:
+      - alert: LeadScoringServiceDown
+        expr: up{job="real-estate-crm-backend", service="lead-scoring"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: real-estate-crm
+        annotations:
+          summary: "Lead scoring service is down"
+          description: "Lead scoring service has been down for more than 2 minutes"
+          runbook_url: "https://docs.your-domain.com/runbooks/lead-scoring-down"
+
+      - alert: ConversionTrackingServiceDown
+        expr: up{job="real-estate-crm-backend", service="conversion-tracking"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: real-estate-crm
+        annotations:
+          summary: "Conversion tracking service is down"
+          description: "Conversion tracking service has been down for more than 2 minutes"
+          runbook_url: "https://docs.your-domain.com/runbooks/conversion-tracking-down"
+
+      - alert: NotificationServiceDown
+        expr: up{job="real-estate-crm-backend", service="notification"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: real-estate-crm
+        annotations:
+          summary: "Notification service is down"
+          description: "Notification service has been down for more than 5 minutes"
+          runbook_url: "https://docs.your-domain.com/runbooks/notification-service-down"
+
+  # Security Alerts
+  - name: security_alerts
+    rules:
+      - alert: HighFailedLoginAttempts
+        expr: rate(login_attempts_total{status="failed"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: real-estate-crm
+        annotations:
+          summary: "High number of failed login attempts"
+          description: "Failed login attempts rate is {{ $value }}/second"
+          runbook_url: "https://docs.your-domain.com/runbooks/high-failed-logins"
+
+      - alert: SuspiciousActivityDetected
+        expr: rate(suspicious_requests_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: real-estate-crm
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "Suspicious requests rate is {{ $value }}/second"
+          runbook_url: "https://docs.your-domain.com/runbooks/suspicious-activity"
+
+      - alert: RateLimitExceeded
+        expr: rate(rate_limit_exceeded_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: real-estate-crm
+        annotations:
+          summary: "Rate limit exceeded"
+          description: "Rate limit exceeded {{ $value }} times in the last 5 minutes"
+          runbook_url: "https://docs.your-domain.com/runbooks/rate-limit-exceeded"

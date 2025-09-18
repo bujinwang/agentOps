@@ -2,6 +2,30 @@ const { validateRegister, validateLogin, validateLeadCreation, handleValidationE
 const { ValidationError } = require('../../src/middleware/errorHandler');
 const { body, validationResult } = require('express-validator');
 
+// Mock express-validator
+jest.mock('express-validator', () => ({
+  body: jest.fn(() => ({
+    isEmail: jest.fn().mockReturnThis(),
+    normalizeEmail: jest.fn().mockReturnThis(),
+    isLength: jest.fn().mockReturnThis(),
+    matches: jest.fn().mockReturnThis(),
+    withMessage: jest.fn().mockReturnThis(),
+    trim: jest.fn().mockReturnThis(),
+    notEmpty: jest.fn().mockReturnThis(),
+    isAlphanumeric: jest.fn().mockReturnThis(),
+    isIn: jest.fn().mockReturnThis(),
+    isFloat: jest.fn().mockReturnThis(),
+    toFloat: jest.fn().mockReturnThis(),
+    isInt: jest.fn().mockReturnThis(),
+    toInt: jest.fn().mockReturnThis(),
+    isMobilePhone: jest.fn().mockReturnThis(),
+    isISO8601: jest.fn().mockReturnThis(),
+    optional: jest.fn().mockReturnThis(),
+    run: jest.fn().mockResolvedValue({})
+  })),
+  validationResult: jest.fn()
+}));
+
 describe('Validation Middleware', () => {
   describe('Auth Validation', () => {
     describe('validateRegister', () => {

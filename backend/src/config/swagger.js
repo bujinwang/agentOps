@@ -36,6 +36,36 @@ const swaggerDefinition = {
         bearerFormat: 'JWT'
       }
     },
+    tags: [
+      {
+        name: 'Authentication',
+        description: 'User authentication and authorization endpoints'
+      },
+      {
+        name: 'Leads',
+        description: 'Lead management and operations'
+      },
+      {
+        name: 'Conversion',
+        description: 'Lead conversion tracking and analytics (converted from n8n workflows)'
+      },
+      {
+        name: 'Lead Scoring',
+        description: 'Advanced lead scoring with ML models (converted from n8n workflows)'
+      },
+      {
+        name: 'Notifications',
+        description: 'Automated notification system (converted from n8n workflows)'
+      },
+      {
+        name: 'Analytics',
+        description: 'CRM analytics and reporting'
+      },
+      {
+        name: 'Tasks',
+        description: 'Task management and tracking'
+      }
+    ],
     schemas: {
       Error: {
         type: 'object',

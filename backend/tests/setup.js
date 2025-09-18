@@ -53,3 +53,35 @@ jest.mock('../src/config/redis', () => ({
 jest.mock('../src/jobs/setup', () => ({
   setupJobQueues: jest.fn()
 }));
+
+// Mock database connection
+const mockPool = {
+  connect: jest.fn(() => ({
+    query: jest.fn(),
+    release: jest.fn()
+  })),
+  query: jest.fn(),
+  end: jest.fn()
+};
+
+jest.mock('../src/config/database', () => ({
+  ...jest.requireActual('../src/config/database'),
+  getDatabase: jest.fn(() => mockPool),
+  executeQuery: jest.fn(),
+  executeWithCache: jest.fn()
+}));
+
+// Also mock the pool export directly for services that import it
+jest.mock('../src/config/database', () => ({
+  ...jest.requireActual('../src/config/database'),
+  getDatabase: jest.fn(() => mockPool),
+  executeQuery: jest.fn(),
+  executeWithCache: jest.fn()
+}), { virtual: true });
+
+// Mock cache service
+jest.mock('../src/services/CacheService', () => ({
+  invalidateUserData: jest.fn(),
+  getUserDashboard: jest.fn(),
+  setUserDashboard: jest.fn()
+}));

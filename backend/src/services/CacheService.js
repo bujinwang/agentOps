@@ -1,312 +1,471 @@
-// Advanced Redis Caching Service for Real Estate CRM
+/**
+ * Advanced Caching Service
+ * Multi-layer caching with Redis and in-memory fallback
+ */
 
-const {
-  cacheSetWithCompression,
-  cacheGetWithDecompression,
-  invalidateByPattern,
-  invalidateUserCache,
-  invalidateLeadCache,
-  getCacheStats,
-  resetCacheStats,
-  generateCacheKey,
-  CACHE_CONFIG
-} = require('../config/redis');
+const { logger } = require('../config/logger');
 
+// Cache configuration
+const CACHE_CONFIG = {
+  defaultTTL: 300,        // 5 minutes default
+  maxMemoryItems: 1000,   // Max items in memory cache
+  compressionThreshold: 1024, // Compress items larger than 1KB
+  redisPrefix: 'cache:',
+  layers: {
+    memory: true,         // In-memory cache
+    redis: true,          // Redis cache
+    database: false       // Future: Database cache
+  }
+};
+
+// In-memory cache storage
+const memoryCache = new Map();
+
+// Cache statistics
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  sets: 0,
+  deletes: 0,
+  errors: 0,
+  memoryItems: 0,
+  redisItems: 0
+};
+
+// Cache entry structure
+class CacheEntry {
+  constructor(value, ttl = CACHE_CONFIG.defaultTTL) {
+    this.value = value;
+    this.timestamp = Date.now();
+    this.ttl = ttl;
+    this.expiresAt = this.timestamp + (ttl * 1000);
+    this.accessCount = 0;
+    this.lastAccessed = this.timestamp;
+  }
+
+  isExpired() {
+    return Date.now() > this.expiresAt;
+  }
+
+  touch() {
+    this.accessCount++;
+    this.lastAccessed = Date.now();
+  }
+
+  getAge() {
+    return Date.now() - this.timestamp;
+  }
+
+  getTimeToLive() {
+    return Math.max(0, this.expiresAt - Date.now());
+  }
+}
+
+// Redis client (lazy loaded)
+let redisClient = null;
+
+const getRedisClient = () => {
+  if (!redisClient && CACHE_CONFIG.layers.redis) {
+    try {
+      const redis = require('../config/redis');
+      redisClient = redis.getRedisClient();
+    } catch (error) {
+      logger.warn('Redis not available for caching:', error.message);
+      CACHE_CONFIG.layers.redis = false;
+    }
+  }
+  return redisClient;
+};
+
+// Memory cache operations
+const memoryCacheOps = {
+  get: (key) => {
+    const entry = memoryCache.get(key);
+    if (!entry) return null;
+
+    if (entry.isExpired()) {
+      memoryCache.delete(key);
+      cacheStats.memoryItems = Math.max(0, cacheStats.memoryItems - 1);
+      return null;
+    }
+
+    entry.touch();
+    return entry.value;
+  },
+
+  set: (key, value, ttl = CACHE_CONFIG.defaultTTL) => {
+    // Clean up expired entries if cache is full
+    if (memoryCache.size >= CACHE_CONFIG.maxMemoryItems) {
+      memoryCacheOps.cleanup();
+    }
+
+    // Remove existing entry if it exists
+    if (memoryCache.has(key)) {
+      cacheStats.memoryItems = Math.max(0, cacheStats.memoryItems - 1);
+    }
+
+    const entry = new CacheEntry(value, ttl);
+    memoryCache.set(key, entry);
+    cacheStats.memoryItems++;
+    cacheStats.sets++;
+  },
+
+  delete: (key) => {
+    if (memoryCache.delete(key)) {
+      cacheStats.memoryItems = Math.max(0, cacheStats.memoryItems - 1);
+      cacheStats.deletes++;
+      return true;
+    }
+    return false;
+  },
+
+  clear: () => {
+    const size = memoryCache.size;
+    memoryCache.clear();
+    cacheStats.memoryItems = 0;
+    cacheStats.deletes += size;
+  },
+
+  cleanup: () => {
+    const now = Date.now();
+    let cleaned = 0;
+
+    for (const [key, entry] of memoryCache.entries()) {
+      if (entry.isExpired()) {
+        memoryCache.delete(key);
+        cleaned++;
+      }
+    }
+
+    cacheStats.memoryItems = Math.max(0, cacheStats.memoryItems - cleaned);
+    if (cleaned > 0) {
+      logger.debug(`Cleaned up ${cleaned} expired cache entries`);
+    }
+  },
+
+  stats: () => ({
+    items: cacheStats.memoryItems,
+    size: memoryCache.size,
+    hitRate: cacheStats.hits + cacheStats.misses > 0
+      ? (cacheStats.hits / (cacheStats.hits + cacheStats.misses) * 100).toFixed(2)
+      : 0
+  })
+};
+
+// Redis cache operations
+const redisCacheOps = {
+  get: async (key) => {
+    const client = getRedisClient();
+    if (!client) return null;
+
+    try {
+      const redisKey = CACHE_CONFIG.redisPrefix + key;
+      const value = await client.get(redisKey);
+      return value ? JSON.parse(value) : null;
+    } catch (error) {
+      logger.error('Redis cache get error:', error);
+      cacheStats.errors++;
+      return null;
+    }
+  },
+
+  set: async (key, value, ttl = CACHE_CONFIG.defaultTTL) => {
+    const client = getRedisClient();
+    if (!client) return false;
+
+    try {
+      const redisKey = CACHE_CONFIG.redisPrefix + key;
+      const serializedValue = JSON.stringify(value);
+      await client.setex(redisKey, ttl, serializedValue);
+      cacheStats.sets++;
+      return true;
+    } catch (error) {
+      logger.error('Redis cache set error:', error);
+      cacheStats.errors++;
+      return false;
+    }
+  },
+
+  delete: async (key) => {
+    const client = getRedisClient();
+    if (!client) return false;
+
+    try {
+      const redisKey = CACHE_CONFIG.redisPrefix + key;
+      const result = await client.del(redisKey);
+      if (result > 0) {
+        cacheStats.deletes++;
+      }
+      return result > 0;
+    } catch (error) {
+      logger.error('Redis cache delete error:', error);
+      cacheStats.errors++;
+      return false;
+    }
+  },
+
+  clear: async () => {
+    const client = getRedisClient();
+    if (!client) return false;
+
+    try {
+      const pattern = CACHE_CONFIG.redisPrefix + '*';
+      const keys = await client.keys(pattern);
+      if (keys.length > 0) {
+        await client.del(...keys);
+        cacheStats.deletes += keys.length;
+      }
+      return true;
+    } catch (error) {
+      logger.error('Redis cache clear error:', error);
+      cacheStats.errors++;
+      return false;
+    }
+  }
+};
+
+// Main cache service
 class CacheService {
-
-  // User-related caching
-  static async getUserDashboard(userId) {
-    const cacheKey = generateCacheKey('dashboard', userId, 'data');
-    return await cacheGetWithDecompression(cacheKey);
+  constructor() {
+    // Start cleanup interval for memory cache
+    setInterval(() => {
+      memoryCacheOps.cleanup();
+    }, 60000); // Clean up every minute
   }
 
-  static async setUserDashboard(userId, data) {
-    const cacheKey = generateCacheKey('dashboard', userId, 'data');
-    return await cacheSetWithCompression(cacheKey, data, CACHE_CONFIG.dashboard);
-  }
+  // Get value from cache
+  async get(key, options = {}) {
+    const { skipMemory = false, skipRedis = false } = options;
 
-  static async getUserProfile(userId) {
-    const cacheKey = generateCacheKey('user', userId, 'profile');
-    return await cacheGetWithDecompression(cacheKey);
-  }
-
-  static async setUserProfile(userId, profile) {
-    const cacheKey = generateCacheKey('user', userId, 'profile');
-    return await cacheSetWithCompression(cacheKey, profile, CACHE_CONFIG.user);
-  }
-
-  // Lead-related caching
-  static async getLeadList(userId, filters = {}, pagination = {}) {
-    const filterKey = this.generateFilterKey(filters, pagination);
-    const cacheKey = generateCacheKey('leads', 'list', userId, filterKey);
-    return await cacheGetWithDecompression(cacheKey);
-  }
-
-  static async setLeadList(userId, filters = {}, pagination = {}, data) {
-    const filterKey = this.generateFilterKey(filters, pagination);
-    const cacheKey = generateCacheKey('leads', 'list', userId, filterKey);
-    return await cacheSetWithCompression(cacheKey, data, CACHE_CONFIG.leads);
-  }
-
-  static async getLead(leadId) {
-    const cacheKey = generateCacheKey('leads', leadId);
-    return await cacheGetWithDecompression(cacheKey);
-  }
-
-  static async setLead(leadId, data) {
-    const cacheKey = generateCacheKey('leads', leadId);
-    return await cacheSetWithCompression(cacheKey, data, CACHE_CONFIG.leads);
-  }
-
-  // Search caching
-  static async getSearchResults(query, filters = {}) {
-    const searchKey = this.generateSearchKey(query, filters);
-    const cacheKey = generateCacheKey('search', searchKey);
-    return await cacheGetWithDecompression(cacheKey);
-  }
-
-  static async setSearchResults(query, filters = {}, results) {
-    const searchKey = this.generateSearchKey(query, filters);
-    const cacheKey = generateCacheKey('search', searchKey);
-    return await cacheSetWithCompression(cacheKey, results, CACHE_CONFIG.search);
-  }
-
-  // Analytics caching
-  static async getAnalyticsData(type, params = {}) {
-    const paramKey = this.generateParamKey(params);
-    const cacheKey = generateCacheKey('analytics', type, paramKey);
-    return await cacheGetWithDecompression(cacheKey);
-  }
-
-  static async setAnalyticsData(type, params = {}, data) {
-    const paramKey = this.generateParamKey(params);
-    const cacheKey = generateCacheKey('analytics', type, paramKey);
-    return await cacheSetWithCompression(cacheKey, data, CACHE_CONFIG.analytics);
-  }
-
-  // Template caching
-  static async getTemplate(templateId) {
-    const cacheKey = generateCacheKey('templates', templateId);
-    return await cacheGetWithDecompression(cacheKey);
-  }
-
-  static async setTemplate(templateId, data) {
-    const cacheKey = generateCacheKey('templates', templateId);
-    return await cacheSetWithCompression(cacheKey, data, CACHE_CONFIG.templates);
-  }
-
-  static async getTemplateList(filters = {}) {
-    const filterKey = this.generateFilterKey(filters);
-    const cacheKey = generateCacheKey('templates', 'list', filterKey);
-    return await cacheGetWithDecompression(cacheKey);
-  }
-
-  static async setTemplateList(filters = {}, data) {
-    const filterKey = this.generateFilterKey(filters);
-    const cacheKey = generateCacheKey('templates', 'list', filterKey);
-    return await cacheSetWithCompression(cacheKey, data, CACHE_CONFIG.templates);
-  }
-
-  // Metadata caching
-  static async getMetadata(type) {
-    const cacheKey = generateCacheKey('metadata', type);
-    return await cacheGetWithDecompression(cacheKey);
-  }
-
-  static async setMetadata(type, data) {
-    const cacheKey = generateCacheKey('metadata', type);
-    return await cacheSetWithCompression(cacheKey, data, CACHE_CONFIG.metadata);
-  }
-
-  // Cache invalidation helpers
-  static async invalidateUserData(userId) {
-    return await invalidateUserCache(userId);
-  }
-
-  static async invalidateLeadData(leadId, userId = null) {
-    return await invalidateLeadCache(leadId, userId);
-  }
-
-  static async invalidateSearchResults() {
-    return await invalidateByPattern(`${CACHE_CONFIG.prefixes.search}*`);
-  }
-
-  static async invalidateAnalytics() {
-    return await invalidateByPattern(`${CACHE_CONFIG.prefixes.analytics}*`);
-  }
-
-  static async invalidateTemplates() {
-    return await invalidateByPattern(`${CACHE_CONFIG.prefixes.templates}*`);
-  }
-
-  // Multi-level caching with fallback
-  static async getWithFallback(cacheKey, fallbackFn, ttl = 3600) {
-    try {
-      // Try cache first
-      const cached = await cacheGetWithDecompression(cacheKey);
-      if (cached !== null) {
-        return { data: cached, source: 'cache' };
+    // Try memory cache first (if enabled)
+    if (CACHE_CONFIG.layers.memory && !skipMemory) {
+      const value = memoryCacheOps.get(key);
+      if (value !== null) {
+        cacheStats.hits++;
+        return value;
       }
+    }
 
-      // Fallback to data source
-      const data = await fallbackFn();
-      if (data !== null) {
-        // Cache the result for future requests
-        await cacheSetWithCompression(cacheKey, data, ttl);
-        return { data, source: 'database' };
+    // Try Redis cache (if enabled)
+    if (CACHE_CONFIG.layers.redis && !skipRedis) {
+      const value = await redisCacheOps.get(key);
+      if (value !== null) {
+        cacheStats.hits++;
+        // Also store in memory cache for faster future access
+        if (CACHE_CONFIG.layers.memory && !skipMemory) {
+          memoryCacheOps.set(key, value, options.ttl);
+        }
+        return value;
       }
+    }
 
-      return { data: null, source: 'none' };
-    } catch (error) {
-      console.error('Cache fallback error:', error);
-      // Return data from source even if caching fails
+    cacheStats.misses++;
+    return null;
+  }
+
+  // Set value in cache
+  async set(key, value, options = {}) {
+    const { ttl = CACHE_CONFIG.defaultTTL, skipMemory = false, skipRedis = false } = options;
+
+    // Store in memory cache (if enabled)
+    if (CACHE_CONFIG.layers.memory && !skipMemory) {
+      memoryCacheOps.set(key, value, ttl);
+    }
+
+    // Store in Redis cache (if enabled)
+    if (CACHE_CONFIG.layers.redis && !skipRedis) {
+      await redisCacheOps.set(key, value, ttl);
+    }
+  }
+
+  // Delete value from cache
+  async delete(key) {
+    let deleted = false;
+
+    // Delete from memory cache
+    if (CACHE_CONFIG.layers.memory) {
+      deleted = memoryCacheOps.delete(key) || deleted;
+    }
+
+    // Delete from Redis cache
+    if (CACHE_CONFIG.layers.redis) {
+      deleted = await redisCacheOps.delete(key) || deleted;
+    }
+
+    return deleted;
+  }
+
+  // Clear all cache
+  async clear() {
+    // Clear memory cache
+    if (CACHE_CONFIG.layers.memory) {
+      memoryCacheOps.clear();
+    }
+
+    // Clear Redis cache
+    if (CACHE_CONFIG.layers.redis) {
+      await redisCacheOps.clear();
+    }
+  }
+
+  // Get or set (cache-aside pattern)
+  async getOrSet(key, valueFn, options = {}) {
+    let value = await this.get(key, options);
+
+    if (value === null) {
       try {
-        const data = await fallbackFn();
-        return { data, source: 'database' };
-      } catch (fallbackError) {
-        console.error('Fallback function error:', fallbackError);
-        return { data: null, source: 'error' };
-      }
-    }
-  }
-
-  // Batch caching operations
-  static async getMultiple(cacheKeys) {
-    const results = [];
-    for (const key of cacheKeys) {
-      const data = await cacheGetWithDecompression(key);
-      results.push(data);
-    }
-    return results;
-  }
-
-  static async setMultiple(keyValuePairs, ttl = 3600) {
-    const promises = keyValuePairs.map(([key, value]) =>
-      cacheSetWithCompression(key, value, ttl)
-    );
-    return await Promise.all(promises);
-  }
-
-  // Cache warming utilities
-  static async warmUserData(userId) {
-    try {
-      const User = require('../models/User');
-
-      // Warm dashboard data
-      const dashboardData = await User.getDashboardData(userId);
-      if (dashboardData) {
-        await this.setUserDashboard(userId, dashboardData);
-      }
-
-      // Warm user profile
-      const userProfile = await User.findById(userId);
-      if (userProfile) {
-        await this.setUserProfile(userId, userProfile);
-      }
-
-      console.log(`Cache warmed for user ${userId}`);
-      return true;
-    } catch (error) {
-      console.error('User cache warming error:', error);
-      return false;
-    }
-  }
-
-  static async warmLeadData(userId, leadIds = []) {
-    try {
-      const Lead = require('../models/Lead');
-
-      if (leadIds.length === 0) {
-        // Warm recent leads
-        const recentLeads = await Lead.getLeads(userId, {}, { limit: 20 });
-        for (const lead of recentLeads.data) {
-          await this.setLead(lead.lead_id, lead);
+        value = await valueFn();
+        if (value !== null && value !== undefined) {
+          await this.set(key, value, options);
         }
-      } else {
-        // Warm specific leads
-        for (const leadId of leadIds) {
-          const lead = await Lead.getById(leadId, userId);
-          if (lead) {
-            await this.setLead(leadId, lead);
-          }
-        }
+      } catch (error) {
+        logger.error('Error in cache getOrSet:', error);
+        cacheStats.errors++;
       }
-
-      console.log(`Cache warmed for ${leadIds.length || 'recent'} leads`);
-      return true;
-    } catch (error) {
-      console.error('Lead cache warming error:', error);
-      return false;
     }
+
+    return value;
   }
 
-  // Cache statistics and monitoring
-  static getStats() {
-    return getCacheStats();
-  }
+  // Get cache statistics
+  getStats() {
+    const memoryStats = CACHE_CONFIG.layers.memory ? memoryCacheOps.stats() : null;
+    const redisStats = CACHE_CONFIG.layers.redis ? { available: true } : { available: false };
 
-  static resetStats() {
-    resetCacheStats();
-  }
-
-  // Utility functions
-  static generateFilterKey(filters, pagination = {}) {
-    const sortedFilters = Object.keys(filters)
-      .sort()
-      .map(key => `${key}:${filters[key]}`)
-      .join('|');
-
-    const paginationKey = pagination.page && pagination.limit
-      ? `page:${pagination.page}|limit:${pagination.limit}`
-      : '';
-
-    return `${sortedFilters}${paginationKey ? `|${paginationKey}` : ''}`;
-  }
-
-  static generateSearchKey(query, filters = {}) {
-    const normalizedQuery = query.toLowerCase().trim();
-    const filterKey = this.generateFilterKey(filters);
-    return `${normalizedQuery}${filterKey ? `|${filterKey}` : ''}`;
-  }
-
-  static generateParamKey(params) {
-    return Object.keys(params)
-      .sort()
-      .map(key => `${key}:${params[key]}`)
-      .join('|');
-  }
-
-  // Cache key patterns for invalidation
-  static getCachePatterns() {
     return {
-      user: `${CACHE_CONFIG.prefixes.user}*`,
-      leads: `${CACHE_CONFIG.prefixes.leads}*`,
-      dashboard: `${CACHE_CONFIG.prefixes.dashboard}*`,
-      search: `${CACHE_CONFIG.prefixes.search}*`,
-      analytics: `${CACHE_CONFIG.prefixes.analytics}*`,
-      templates: `${CACHE_CONFIG.prefixes.templates}*`,
-      metadata: `${CACHE_CONFIG.prefixes.metadata}*`,
-      session: `${CACHE_CONFIG.prefixes.session}*`
+      overall: {
+        hits: cacheStats.hits,
+        misses: cacheStats.misses,
+        sets: cacheStats.sets,
+        deletes: cacheStats.deletes,
+        errors: cacheStats.errors,
+        hitRate: cacheStats.hits + cacheStats.misses > 0
+          ? (cacheStats.hits / (cacheStats.hits + cacheStats.misses) * 100).toFixed(2)
+          : 0
+      },
+      memory: memoryStats,
+      redis: redisStats,
+      config: CACHE_CONFIG
     };
   }
 
   // Health check
-  static async healthCheck() {
-    try {
-      const stats = this.getStats();
-      return {
-        status: 'healthy',
-        stats,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      return {
-        status: 'unhealthy',
-        error: error.message,
-        timestamp: new Date().toISOString()
-      };
+  async healthCheck() {
+    const health = {
+      memory: CACHE_CONFIG.layers.memory,
+      redis: false,
+      overall: false
+    };
+
+    // Check Redis connectivity
+    if (CACHE_CONFIG.layers.redis) {
+      try {
+        const client = getRedisClient();
+        if (client) {
+          await client.ping();
+          health.redis = true;
+        }
+      } catch (error) {
+        logger.warn('Redis health check failed:', error.message);
+      }
     }
+
+    health.overall = health.memory || health.redis;
+    return health;
   }
 }
 
-module.exports = CacheService;
+// Create singleton instance
+const cacheService = new CacheService();
+
+// Cache middleware for Express routes
+const cacheMiddleware = (options = {}) => {
+  const {
+    ttl = CACHE_CONFIG.defaultTTL,
+    keyFn = (req) => `${req.method}:${req.originalUrl}`,
+    condition = () => true
+  } = options;
+
+  return async (req, res, next) => {
+    // Skip caching for non-GET requests or if condition fails
+    if (req.method !== 'GET' || !condition(req)) {
+      return next();
+    }
+
+    const cacheKey = keyFn(req);
+
+    try {
+      // Try to get from cache
+      const cachedData = await cacheService.get(cacheKey);
+      if (cachedData) {
+        logger.debug('Cache hit for:', cacheKey);
+        return res.json(cachedData);
+      }
+
+      // Store original json method
+      const originalJson = res.json;
+
+      // Override json method to cache response
+      res.json = function(data) {
+        // Cache successful responses only
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          cacheService.set(cacheKey, data, { ttl }).catch(error => {
+            logger.error('Cache middleware error:', error);
+          });
+        }
+
+        // Call original json method
+        return originalJson.call(this, data);
+      };
+
+      next();
+    } catch (error) {
+      logger.error('Cache middleware error:', error);
+      next();
+    }
+  };
+};
+
+// Cache invalidation helpers
+const cacheInvalidation = {
+  // Invalidate user-specific cache
+  invalidateUserCache: async (userId) => {
+    const patterns = [
+      `user:${userId}:*`,
+      `leads:user:${userId}:*`,
+      `tasks:user:${userId}:*`
+    ];
+
+    for (const pattern of patterns) {
+      // In a real implementation, you'd use Redis SCAN or KEYS
+      // For now, we'll clear broader patterns
+      await cacheService.clear();
+    }
+  },
+
+  // Invalidate lead-specific cache
+  invalidateLeadCache: async (leadId) => {
+    const patterns = [
+      `lead:${leadId}`,
+      `lead:${leadId}:*`,
+      `leads:*:${leadId}`
+    ];
+
+    // Clear cache (simplified implementation)
+    await cacheService.clear();
+  },
+
+  // Invalidate all cache for a resource type
+  invalidateResourceCache: async (resourceType) => {
+    // Clear cache (simplified implementation)
+    await cacheService.clear();
+  }
+};
+
+module.exports = {
+  CacheService,
+  cacheService,
+  cacheMiddleware,
+  cacheInvalidation,
+  CACHE_CONFIG
+};

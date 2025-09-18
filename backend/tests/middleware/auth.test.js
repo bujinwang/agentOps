@@ -23,7 +23,8 @@ jest.mock('../../src/config/constants', () => ({
   ERROR_MESSAGES: {
     UNAUTHORIZED: 'Unauthorized access',
     INVALID_TOKEN: 'Invalid or expired token',
-    USER_NOT_FOUND: 'User not found'
+    USER_NOT_FOUND: 'User not found',
+    INTERNAL_SERVER_ERROR: 'Internal server error'
   }
 }));
 

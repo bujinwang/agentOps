@@ -8,7 +8,7 @@ CREATE INDEX IF NOT EXISTS idx_leads_user_status ON leads(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_leads_user_priority ON leads(user_id, priority);
 CREATE INDEX IF NOT EXISTS idx_leads_user_created_at ON leads(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_status_priority ON leads(status, priority);
-CREATE INDEX IF NOT EXISTS idx_leads_follow_up_overdue ON leads(follow_up_date) WHERE follow_up_date <= NOW();
+-- Removed: idx_leads_follow_up_overdue - NOW() is not IMMUTABLE
 CREATE INDEX IF NOT EXISTS idx_leads_budget_range ON leads(budget_min, budget_max) WHERE budget_min IS NOT NULL AND budget_max IS NOT NULL;
 
 -- Partial indexes for frequently filtered data
@@ -24,17 +24,16 @@ CREATE INDEX IF NOT EXISTS idx_interactions_type_date ON interactions(type, inte
 -- Task performance indexes
 CREATE INDEX IF NOT EXISTS idx_tasks_user_status ON tasks(user_id, is_completed);
 CREATE INDEX IF NOT EXISTS idx_tasks_lead_status ON tasks(lead_id, is_completed);
-CREATE INDEX IF NOT EXISTS idx_tasks_due_soon ON tasks(due_date) WHERE due_date <= NOW() + INTERVAL '7 days' AND is_completed = false;
-CREATE INDEX IF NOT EXISTS idx_tasks_overdue ON tasks(due_date) WHERE due_date < NOW() AND is_completed = false;
+-- Removed: idx_tasks_due_soon and idx_tasks_overdue - NOW() is not IMMUTABLE
 
 -- Notification performance indexes
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read) WHERE read = false;
 CREATE INDEX IF NOT EXISTS idx_notifications_type_unread ON notifications(type, read) WHERE read = false;
-CREATE INDEX IF NOT EXISTS idx_notifications_created_recent ON notifications(created_at DESC) WHERE created_at >= NOW() - INTERVAL '30 days';
+-- Removed: idx_notifications_created_recent - NOW() is not IMMUTABLE
 
 -- User performance indexes
 CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users(LOWER(email));
-CREATE INDEX IF NOT EXISTS idx_users_created_recent ON users(created_at DESC) WHERE created_at >= NOW() - INTERVAL '90 days';
+-- Removed: idx_users_created_recent - NOW() is not IMMUTABLE
 
 -- Full-text search indexes for better search performance
 CREATE INDEX IF NOT EXISTS idx_leads_search ON leads USING gin(to_tsvector('english', COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') || ' ' || COALESCE(email, '') || ' ' || COALESCE(phone_number, '') || ' ' || COALESCE(notes, '')));
@@ -83,8 +82,8 @@ LEFT JOIN tasks t ON u.user_id = t.user_id
 LEFT JOIN notifications n ON u.user_id = n.user_id
 GROUP BY u.user_id;
 
--- Create indexes on the view (materialized view would be better but requires more setup)
-CREATE INDEX IF NOT EXISTS idx_dashboard_stats_user ON dashboard_stats(user_id);
+-- Note: Cannot create indexes on regular views in PostgreSQL
+-- Consider creating a materialized view for better performance if needed
 
 -- Down Migration
 DROP VIEW IF EXISTS dashboard_stats;
@@ -113,4 +112,4 @@ DROP INDEX IF EXISTS idx_users_email_lower;
 DROP INDEX IF EXISTS idx_users_created_recent;
 DROP INDEX IF EXISTS idx_leads_search;
 DROP INDEX IF EXISTS idx_tasks_search;
-DROP INDEX IF EXISTS idx_dashboard_stats_user;
+-- Removed: DROP INDEX idx_dashboard_stats_user - cannot create indexes on regular views
