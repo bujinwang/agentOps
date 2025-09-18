@@ -113,9 +113,63 @@ class TemplateService {
     }
   }
 
+  // Sanitize input data to prevent XSS and injection attacks
+  sanitizeInput(input) {
+    if (typeof input !== 'string') {
+      return input;
+    }
+
+    // Remove potentially dangerous characters and escape HTML entities
+    return input
+      .replace(/[<>'"&]/g, (match) => {
+        const entityMap = {
+          '<': '<',
+          '>': '>',
+          "'": '&#x27;',
+          '"': '"',
+          '&': '&'
+        };
+        return entityMap[match];
+      })
+      // Remove null bytes and other control characters
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+      // Limit length to prevent DoS
+      .substring(0, 1000);
+  }
+
+  // Validate lead data structure
+  validateLeadData(leadData) {
+    if (!leadData || typeof leadData !== 'object') {
+      throw new Error('Invalid lead data provided');
+    }
+
+    const requiredFields = ['first_name', 'last_name', 'email'];
+    for (const field of requiredFields) {
+      if (!leadData.hasOwnProperty(field)) {
+        throw new Error(`Missing required field: ${field}`);
+      }
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(leadData.email)) {
+      throw new Error('Invalid email format');
+    }
+
+    return true;
+  }
+
   // Render template with lead data
   async renderTemplate(templateId, userId, leadData) {
     try {
+      // Validate inputs
+      if (!templateId || !userId) {
+        throw new Error('Template ID and User ID are required');
+      }
+
+      // Validate lead data
+      this.validateLeadData(leadData);
+
       const template = await this.getTemplate(templateId, userId);
       if (!template) {
         throw new Error('Template not found');
@@ -124,35 +178,35 @@ class TemplateService {
       let content = template.content;
       let subject = template.subject;
 
-      // Replace template variables with lead data
+      // Prepare sanitized variables
       const variables = {
-        first_name: leadData.first_name || '',
-        last_name: leadData.last_name || '',
-        email: leadData.email || '',
-        phone_number: leadData.phone_number || '',
-        property_type: leadData.property_type || '',
-        desired_location: leadData.desired_location || '',
-        budget_min: leadData.budget_min || '',
-        budget_max: leadData.budget_max || '',
-        bedrooms_min: leadData.bedrooms_min || '',
-        bathrooms_min: leadData.bathrooms_min || '',
-        source: leadData.source || '',
-        status: leadData.status || '',
-        priority: leadData.priority || '',
-        notes: leadData.notes || '',
-        ai_summary: leadData.ai_summary || ''
+        first_name: this.sanitizeInput(leadData.first_name || ''),
+        last_name: this.sanitizeInput(leadData.last_name || ''),
+        email: this.sanitizeInput(leadData.email || ''),
+        phone_number: this.sanitizeInput(leadData.phone_number || ''),
+        property_type: this.sanitizeInput(leadData.property_type || ''),
+        desired_location: this.sanitizeInput(leadData.desired_location || ''),
+        budget_min: this.sanitizeInput(String(leadData.budget_min || '')),
+        budget_max: this.sanitizeInput(String(leadData.budget_max || '')),
+        bedrooms_min: this.sanitizeInput(String(leadData.bedrooms_min || '')),
+        bathrooms_min: this.sanitizeInput(String(leadData.bathrooms_min || '')),
+        source: this.sanitizeInput(leadData.source || ''),
+        status: this.sanitizeInput(leadData.status || ''),
+        priority: this.sanitizeInput(leadData.priority || ''),
+        notes: this.sanitizeInput(leadData.notes || ''),
+        ai_summary: this.sanitizeInput(leadData.ai_summary || '')
       };
 
-      // Replace variables in content
+      // Replace variables in content with proper escaping
       Object.keys(variables).forEach(key => {
-        const regex = new RegExp(`{{${key}}}`, 'g');
+        const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
         content = content.replace(regex, variables[key]);
       });
 
       // Replace variables in subject (for email templates)
       if (subject) {
         Object.keys(variables).forEach(key => {
-          const regex = new RegExp(`{{${key}}}`, 'g');
+          const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
           subject = subject.replace(regex, variables[key]);
         });
       }
@@ -165,7 +219,7 @@ class TemplateService {
       };
     } catch (error) {
       console.error('Error rendering template:', error);
-      throw error;
+      throw new Error(`Template rendering failed: ${error.message}`);
     }
   }
 

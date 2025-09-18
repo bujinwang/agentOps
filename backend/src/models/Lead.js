@@ -1,5 +1,6 @@
 
-const { getDatabase } = require('../config/database');
+const { getDatabase, executeQuery, executeBatch } = require('../config/database');
+const CacheService = require('../services/CacheService');
 const { LEAD_PRIORITY, INTERACTION_TYPES } = require('../config/constants');
 
 class Lead {
@@ -23,6 +24,23 @@ class Lead {
     this.ai_summary = data.ai_summary;
     this.created_at = data.created_at;
     this.updated_at = data.updated_at;
+
+    // Enrichment fields
+    this.enrichment_consent = data.enrichment_consent;
+    this.consent_granted_at = data.consent_granted_at;
+    this.consent_expires_at = data.consent_expires_at;
+    this.consent_withdrawn_at = data.consent_withdrawn_at;
+    this.consent_withdrawal_reason = data.consent_withdrawal_reason;
+    this.consent_id = data.consent_id;
+    this.credit_data_consent = data.credit_data_consent;
+    this.ccpa_consent = data.ccpa_consent;
+    this.permissible_purpose_declared = data.permissible_purpose_declared;
+    this.enrichment_data = data.enrichment_data;
+    this.enrichment_status = data.enrichment_status;
+    this.last_enrichment_at = data.last_enrichment_at;
+    this.enrichment_quality_score = data.enrichment_quality_score;
+    this.enrichment_confidence = data.enrichment_confidence;
+    this.enrichment_sources = data.enrichment_sources;
   }
 
   // Create a new lead
@@ -66,13 +84,20 @@ class Lead {
     return result.rows.length > 0 ? new Lead(result.rows[0]) : null;
   }
 
-  // Get leads with filtering
+  // Get leads with filtering and caching
   static async getLeads(userId, filters = {}, pagination = {}) {
-    const db = getDatabase();
     const { status, priority, searchTerm, page = 1, limit = 50 } = filters;
 
     const validPage = Math.max(1, parseInt(page));
     const validLimit = Math.min(Math.max(1, parseInt(limit)), 200);
+
+    // Try to get from cache first
+    const cachedResult = await CacheService.getLeadList(userId, filters, { page: validPage, limit: validLimit });
+    if (cachedResult) {
+      return cachedResult;
+    }
+
+    const db = getDatabase();
     const offset = (validPage - 1) * validLimit;
 
     let whereConditions = ['user_id = $1'];
@@ -112,14 +137,14 @@ class Lead {
     const countParams = queryParams.slice(0, paramIndex);
 
     const [leadsResult, countResult] = await Promise.all([
-      db.query(leadsQuery, queryParams),
-      db.query(countQuery, countParams)
+      executeQuery(leadsQuery, queryParams),
+      executeQuery(countQuery, countParams)
     ]);
 
     const totalItems = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(totalItems / validLimit);
 
-    return {
+    const result = {
       data: leadsResult.rows.map(row => new Lead(row)),
       pagination: {
         currentPage: validPage,
@@ -130,26 +155,29 @@ class Lead {
         hasPrev: validPage > 1
       }
     };
+
+    // Cache the result
+    await CacheService.setLeadList(userId, filters, { page: validPage, limit: validLimit }, result);
+
+    return result;
   }
 
-  // Get lead by ID
+  // Get lead by ID with optimized query
   static async getById(leadId, userId) {
-    const db = getDatabase();
     const query = 'SELECT * FROM leads WHERE lead_id = $1 AND user_id = $2 LIMIT 1';
-    const result = await db.query(query, [leadId, userId]);
+    const result = await executeQuery(query, [leadId, userId]);
     return result.rows.length > 0 ? new Lead(result.rows[0]) : null;
   }
 
-  // Update lead status
+  // Update lead status with optimized query
   static async updateStatus(leadId, userId, newStatus) {
-    const db = getDatabase();
     const query = `
       UPDATE leads
       SET status = $1, updated_at = NOW()
       WHERE lead_id = $2 AND user_id = $3
       RETURNING *
     `;
-    const result = await db.query(query, [newStatus, leadId, userId]);
+    const result = await executeQuery(query, [newStatus, leadId, userId]);
     return result.rows.length > 0 ? new Lead(result.rows[0]) : null;
   }
 
@@ -183,7 +211,7 @@ class Lead {
       RETURNING *
     `;
 
-    const result = await db.query(query, values);
+    const result = await executeQuery(query, values);
     
     if (result.rows.length > 0) {
       Object.assign(this, result.rows[0]);
@@ -192,11 +220,10 @@ class Lead {
     return this;
   }
 
-  // Delete lead
+  // Delete lead with optimized query
   static async delete(leadId, userId) {
-    const db = getDatabase();
     const query = 'DELETE FROM leads WHERE lead_id = $1 AND user_id = $2 RETURNING lead_id';
-    const result = await db.query(query, [leadId, userId]);
+    const result = await executeQuery(query, [leadId, userId]);
     return result.rows.length > 0;
   }
 
@@ -206,7 +233,7 @@ class Lead {
     
     // First verify the lead belongs to the fromUser
     const checkQuery = 'SELECT * FROM leads WHERE lead_id = $1 AND user_id = $2 LIMIT 1';
-    const checkResult = await db.query(checkQuery, [leadId, fromUserId]);
+    const checkResult = await executeQuery(checkQuery, [leadId, fromUserId]);
     
     if (checkResult.rows.length === 0) {
       throw new Error('Lead not found or access denied');
@@ -223,7 +250,7 @@ class Lead {
       RETURNING *
     `;
     
-    const result = await db.query(updateQuery, [toUserId, leadId, fromUserId]);
+    const result = await executeQuery(updateQuery, [toUserId, leadId, fromUserId]);
     
     if (result.rows.length === 0) {
       throw new Error('Failed to assign lead');
@@ -250,21 +277,20 @@ class Lead {
     return new Lead(result.rows[0]);
   }
 
-  // Get unassigned leads (leads with no user assignment)
+  // Get unassigned leads (leads with no user assignment) with optimized query
   static async getUnassignedLeads(limit = 50, page = 1) {
-    const db = getDatabase();
     const validPage = Math.max(1, parseInt(page));
     const validLimit = Math.min(Math.max(1, parseInt(limit)), 200);
     const offset = (validPage - 1) * validLimit;
-    
+
     const query = `
       SELECT * FROM leads
       WHERE user_id IS NULL OR user_id = 0
       ORDER BY created_at DESC
       LIMIT $1 OFFSET $2
     `;
-    
-    const result = await db.query(query, [validLimit, offset]);
+
+    const result = await executeQuery(query, [validLimit, offset]);
     
     return {
       data: result.rows.map(row => new Lead(row)),
@@ -323,8 +349,8 @@ class Lead {
     const countParams = queryParams.slice(0, paramIndex);
     
     const [leadsResult, countResult] = await Promise.all([
-      db.query(query, queryParams),
-      db.query(countQuery, countParams)
+      executeQuery(query, queryParams),
+      executeQuery(countQuery, countParams)
     ]);
     
     const totalItems = parseInt(countResult.rows[0].total);
@@ -366,7 +392,23 @@ class Lead {
       last_contacted_at: this.last_contacted_at,
       follow_up_date: this.follow_up_date,
       created_at: this.created_at,
-      updated_at: this.updated_at
+      updated_at: this.updated_at,
+      // Enrichment fields
+      enrichment_consent: this.enrichment_consent,
+      consent_granted_at: this.consent_granted_at,
+      consent_expires_at: this.consent_expires_at,
+      consent_withdrawn_at: this.consent_withdrawn_at,
+      consent_withdrawal_reason: this.consent_withdrawal_reason,
+      consent_id: this.consent_id,
+      credit_data_consent: this.credit_data_consent,
+      ccpa_consent: this.ccpa_consent,
+      permissible_purpose_declared: this.permissible_purpose_declared,
+      enrichment_data: this.enrichment_data,
+      enrichment_status: this.enrichment_status,
+      last_enrichment_at: this.last_enrichment_at,
+      enrichment_quality_score: this.enrichment_quality_score,
+      enrichment_confidence: this.enrichment_confidence,
+      enrichment_sources: this.enrichment_sources,
     };
   }
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PerformanceInsight, InsightImpact } from '../../types/insights';
@@ -19,26 +19,27 @@ const InsightCard: React.FC<InsightCardProps> = ({
 }) => {
   const { theme } = useTheme();
 
-  const getImpactColor = (impact: InsightImpact) => {
-    switch (impact) {
+  // Memoize expensive computations
+  const impactColor = useMemo(() => {
+    switch (insight.impact) {
       case 'high': return MaterialColors.error[500];
       case 'medium': return MaterialColors.warning[500];
       case 'low': return MaterialColors.secondary[500];
       default: return MaterialColors.neutral[600];
     }
-  };
+  }, [insight.impact]);
 
-  const getImpactIcon = (impact: InsightImpact) => {
-    switch (impact) {
+  const impactIcon = useMemo(() => {
+    switch (insight.impact) {
       case 'high': return 'alert-circle';
       case 'medium': return 'alert';
       case 'low': return 'check-circle';
       default: return 'information';
     }
-  };
+  }, [insight.impact]);
 
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
+  const categoryIcon = useMemo(() => {
+    switch (insight.category) {
       case 'timing': return 'clock-outline';
       case 'strategy': return 'target';
       case 'prioritization': return 'sort-variant';
@@ -47,15 +48,19 @@ const InsightCard: React.FC<InsightCardProps> = ({
       case 'conversion': return 'trending-up';
       default: return 'lightbulb-outline';
     }
-  };
+  }, [insight.category]);
 
-  const formatConfidence = (confidence: number) => {
-    if (confidence >= 90) return 'Very High';
-    if (confidence >= 80) return 'High';
-    if (confidence >= 70) return 'Medium';
-    if (confidence >= 60) return 'Low';
+  const formattedConfidence = useMemo(() => {
+    if (insight.confidence >= 90) return 'Very High';
+    if (insight.confidence >= 80) return 'High';
+    if (insight.confidence >= 70) return 'Medium';
+    if (insight.confidence >= 60) return 'Low';
     return 'Very Low';
-  };
+  }, [insight.confidence]);
+
+  const formattedDate = useMemo(() => {
+    return new Date(insight.generatedAt).toLocaleDateString();
+  }, [insight.generatedAt]);
 
   return (
     <TouchableOpacity
@@ -70,7 +75,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
       onPress={onPress}
       accessibilityLabel={accessibilityManager.generateAccessibilityLabel(
         `Insight: ${insight.title}`,
-        `${insight.description}. Impact: ${insight.impact}. Confidence: ${formatConfidence(insight.confidence)}`
+        `${insight.description}. Impact: ${insight.impact}. Confidence: ${formattedConfidence}`
       )}
       accessibilityRole="button"
     >
@@ -78,7 +83,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <MaterialCommunityIcons
-            name={getCategoryIcon(insight.category)}
+            name={categoryIcon as any}
             size={24}
             color={MaterialColors.primary[500]}
             style={styles.categoryIcon}
@@ -93,12 +98,12 @@ const InsightCard: React.FC<InsightCardProps> = ({
 
         <View style={styles.impactRow}>
           <MaterialCommunityIcons
-            name={getImpactIcon(insight.impact)}
+            name={impactIcon as any}
             size={20}
-            color={getImpactColor(insight.impact)}
+            color={impactColor}
           />
           <Text
-            style={[styles.impactText, { color: getImpactColor(insight.impact) }]}
+            style={[styles.impactText, { color: impactColor }]}
           >
             {insight.impact.toUpperCase()}
           </Text>
@@ -120,7 +125,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
             Confidence:
           </Text>
           <Text style={[styles.confidenceValue, { color: MaterialColors.primary[500] }]}>
-            {formatConfidence(insight.confidence)}
+            {formattedConfidence}
           </Text>
         </View>
 
@@ -174,7 +179,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
 
       {/* Timestamp */}
       <Text style={[styles.timestamp, { color: MaterialColors.neutral[500] }]}>
-        {new Date(insight.generatedAt).toLocaleDateString()}
+        {formattedDate}
       </Text>
     </TouchableOpacity>
   );

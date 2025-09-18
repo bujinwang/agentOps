@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,490 +7,487 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  Modal,
-  FlatList
+  KeyboardAvoidingView,
+  Platform,
+  Dimensions,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import {
-  CommunicationTemplate,
-  TemplateVariable,
-  TemplateCondition,
-  TemplatePreview,
-  TemplateValidationResult
-} from '../types/communication';
-import { templateService } from '../services/templateService';
-import { useCommunicationTemplates } from '../hooks/useCommunicationTemplates';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { CommunicationTemplate, TemplateVariable, TemplateCategory, CommunicationChannel, TemplateStatus } from '../types/template';
+import { templateRenderingService } from '../services/templateRenderingService';
+import { templateVariableService } from '../services/templateVariableService';
+
+const { width: screenWidth } = Dimensions.get('window');
+
+// Template categories and communication channels constants
+const TEMPLATE_CATEGORIES = {
+  initial_contact: { name: 'Initial Contact', icon: 'handshake' },
+  follow_up: { name: 'Follow-up', icon: 'clock' },
+  property_showing: { name: 'Property Showing', icon: 'home' },
+  proposal: { name: 'Proposal', icon: 'file-text' },
+  negotiation: { name: 'Negotiation', icon: 'scale' },
+  closing: { name: 'Closing', icon: 'trophy' },
+  thank_you: { name: 'Thank You', icon: 'heart' },
+  nurturing: { name: 'Nurturing', icon: 'seedling' },
+  re_engagement: { name: 'Re-engagement', icon: 'refresh' },
+};
+
+const COMMUNICATION_CHANNELS = {
+  email: { name: 'Email', icon: 'mail' },
+  sms: { name: 'SMS', icon: 'message-square' },
+  in_app: { name: 'In-App', icon: 'smartphone' },
+  push: { name: 'Push', icon: 'bell' },
+};
 
 interface TemplateEditorProps {
   template?: CommunicationTemplate;
-  onSave: (template: Omit<CommunicationTemplate, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  onSave: (template: CommunicationTemplate) => void;
   onCancel: () => void;
-  isVisible: boolean;
+  isNew?: boolean;
 }
 
-interface VariableInputProps {
-  variable: TemplateVariable;
-  onUpdate: (variable: TemplateVariable) => void;
-  onRemove: () => void;
+interface DragItem {
+  id: string;
+  type: 'text' | 'variable' | 'image';
+  content: string;
+  position: { x: number; y: number };
 }
 
-const VariableInput: React.FC<VariableInputProps> = ({ variable, onUpdate, onRemove }) => {
-  const [name, setName] = useState(variable.name);
-  const [type, setType] = useState(variable.type);
-  const [description, setDescription] = useState(variable.description);
-  const [required, setRequired] = useState(variable.required);
-  const [defaultValue, setDefaultValue] = useState(variable.defaultValue?.toString() || '');
-
-  const handleUpdate = useCallback(() => {
-    const updatedVariable: TemplateVariable = {
-      name,
-      type: type as TemplateVariable['type'],
-      description,
-      required,
-      defaultValue: defaultValue || undefined
-    };
-    onUpdate(updatedVariable);
-  }, [name, type, description, required, defaultValue, onUpdate]);
-
-  useEffect(() => {
-    handleUpdate();
-  }, [handleUpdate]);
-
-  return (
-    <View style={styles.variableContainer}>
-      <View style={styles.variableHeader}>
-        <Text style={styles.variableTitle}>Variable: {name}</Text>
-        <TouchableOpacity onPress={onRemove} style={styles.removeButton}>
-          <MaterialIcons name="delete" size={20} color="#ff4444" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.variableRow}>
-        <TextInput
-          style={[styles.input, { flex: 1 }]}
-          placeholder="Variable name"
-          value={name}
-          onChangeText={setName}
-        />
-        <View style={styles.typePicker}>
-          <Text style={styles.typeLabel}>Type:</Text>
-          {['string', 'number', 'boolean', 'date'].map((t) => (
-            <TouchableOpacity
-              key={t}
-              style={[styles.typeOption, type === t && styles.typeOptionSelected]}
-              onPress={() => setType(t as TemplateVariable['type'])}
-            >
-              <Text style={[styles.typeText, type === t && styles.typeTextSelected]}>
-                {t}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Description"
-        value={description}
-        onChangeText={setDescription}
-      />
-
-      <View style={styles.variableRow}>
-        <TouchableOpacity
-          style={[styles.checkbox, required && styles.checkboxChecked]}
-          onPress={() => setRequired(!required)}
-        >
-          {required && <MaterialIcons name="check" size={16} color="#fff" />}
-        </TouchableOpacity>
-        <Text style={styles.checkboxLabel}>Required</Text>
-
-        <TextInput
-          style={[styles.input, { flex: 1, marginLeft: 10 }]}
-          placeholder="Default value (optional)"
-          value={defaultValue}
-          onChangeText={setDefaultValue}
-        />
-      </View>
-    </View>
-  );
-};
-
-const TemplateEditor: React.FC<TemplateEditorProps> = ({
+export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   template,
   onSave,
   onCancel,
-  isVisible
+  isNew = false,
 }) => {
   const [name, setName] = useState(template?.name || '');
-  const [category, setCategory] = useState(template?.category || '');
-  const [subjectTemplate, setSubjectTemplate] = useState(template?.subjectTemplate || '');
-  const [contentTemplate, setContentTemplate] = useState(template?.contentTemplate || '');
-  const [variables, setVariables] = useState<Record<string, TemplateVariable>>(template?.variables || {});
-  const [conditions, setConditions] = useState<TemplateCondition[]>(template?.conditions || []);
-  const [isActive, setIsActive] = useState(template?.isActive ?? true);
-  const [showPreview, setShowPreview] = useState(false);
-  const [preview, setPreview] = useState<TemplatePreview | null>(null);
-  const [validation, setValidation] = useState<TemplateValidationResult | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [description, setDescription] = useState(template?.description || '');
+  const [category, setCategory] = useState<TemplateCategory>(template?.category || 'initial_contact');
+  const [channel, setChannel] = useState<CommunicationChannel>(template?.channel || 'email');
+  const [subject, setSubject] = useState(template?.subject || '');
+  const [content, setContent] = useState(template?.content || '');
+  const [selectedVariable, setSelectedVariable] = useState<TemplateVariable | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [previewContent, setPreviewContent] = useState('');
+  const [dragItems, setDragItems] = useState<DragItem[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState(0);
 
-  const { generatePreview, validateTemplate } = useCommunicationTemplates();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const contentInputRef = useRef<TextInput>(null);
 
-  const categories = [
-    'onboarding',
-    'followup',
-    'engagement',
-    'nurturing',
-    'closing',
-    'retention',
-    'reactivation'
-  ];
+  // Memoize available variables to prevent unnecessary recalculations
+  const availableVariables = useMemo(() => {
+    const allVariables = templateVariableService.getAllVariableDefinitions();
+    return allVariables.filter(variable => {
+      // Filter variables based on channel appropriateness
+      if (channel === 'sms') {
+        // For SMS, prefer shorter, essential variables
+        return variable.category !== 'Property Details' || variable.name === 'propertyAddress';
+      }
+      // For email and in-app, include all variables
+      return true;
+    }).map(variable => ({
+      id: variable.name,
+      name: variable.name,
+      displayName: variable.description,
+      type: variable.type,
+      source: variable.source,
+      description: variable.description,
+      required: variable.required,
+      fallback: variable.fallback,
+      validation: variable.validation,
+      examples: variable.examples,
+      category: variable.category
+    }));
+  }, [channel]);
 
-  const handleAddVariable = useCallback(() => {
-    const newVarName = `var${Object.keys(variables).length + 1}`;
-    const newVariable: TemplateVariable = {
-      name: newVarName,
-      type: 'string',
-      description: '',
-      required: false
-    };
-    setVariables(prev => ({ ...prev, [newVarName]: newVariable }));
-  }, [variables]);
-
-  const handleUpdateVariable = useCallback((oldName: string, updatedVariable: TemplateVariable) => {
-    setVariables(prev => {
-      const newVars = { ...prev };
-      delete newVars[oldName];
-      newVars[updatedVariable.name] = updatedVariable;
-      return newVars;
-    });
-  }, []);
-
-  const handleRemoveVariable = useCallback((varName: string) => {
-    setVariables(prev => {
-      const newVars = { ...prev };
-      delete newVars[varName];
-      return newVars;
-    });
-  }, []);
-
-  const handleInsertVariable = useCallback((varName: string) => {
-    const cursorPosition = contentTemplate.length;
-    const beforeCursor = contentTemplate.slice(0, cursorPosition);
-    const afterCursor = contentTemplate.slice(cursorPosition);
-    const variableText = `{{${varName}}}`;
-
-    setContentTemplate(beforeCursor + variableText + afterCursor);
-  }, [contentTemplate]);
-
-  const handlePreview = useCallback(() => {
-    const templateData: CommunicationTemplate = {
-      id: template?.id || 0,
-      name,
-      category,
-      subjectTemplate: subjectTemplate || undefined,
-      contentTemplate,
-      variables,
-      conditions,
-      isActive,
-      createdAt: template?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    const previewResult = templateService.generatePreview(templateData);
-    setPreview(previewResult);
-    setShowPreview(true);
-  }, [name, category, subjectTemplate, contentTemplate, variables, conditions, isActive, template]);
-
-  const handleValidate = useCallback(() => {
-    const templateData: CommunicationTemplate = {
-      id: template?.id || 0,
-      name,
-      category,
-      subjectTemplate: subjectTemplate || undefined,
-      contentTemplate,
-      variables,
-      conditions,
-      isActive,
-      createdAt: template?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    const validationResult = templateService.validateTemplate(templateData);
-    setValidation(validationResult);
-
-    if (!validationResult.isValid) {
-      Alert.alert(
-        'Validation Errors',
-        validationResult.errors.join('\n'),
-        [{ text: 'OK' }]
-      );
+  useEffect(() => {
+    if (template?.content) {
+      setContent(template.content);
+      setCursorPosition(template.content.length);
     }
-  }, [name, category, subjectTemplate, contentTemplate, variables, conditions, isActive, template]);
+  }, [template]);
 
-  const handleSave = useCallback(async () => {
-    // Validate before saving
-    const templateData: CommunicationTemplate = {
-      id: template?.id || 0,
-      name,
-      category,
-      subjectTemplate: subjectTemplate || undefined,
-      contentTemplate,
-      variables,
-      conditions,
-      isActive,
-      createdAt: template?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      // Cleanup any subscriptions or timers if needed
+      setDragItems([]);
+      setIsDragging(false);
     };
+  }, []);
 
-    const validationResult = templateService.validateTemplate(templateData);
-    if (!validationResult.isValid) {
-      Alert.alert(
-        'Cannot Save',
-        'Please fix validation errors before saving:\n\n' + validationResult.errors.join('\n'),
-        [{ text: 'OK' }]
-      );
+  // Validate state consistency
+  useEffect(() => {
+    // Ensure cursor position is within content bounds
+    if (cursorPosition > content.length) {
+      setCursorPosition(content.length);
+    }
+    if (cursorPosition < 0) {
+      setCursorPosition(0);
+    }
+  }, [content, cursorPosition]);
+
+  const handlePreview = async () => {
+    // Validate required fields before preview
+    if (!content.trim()) {
+      Alert.alert('Validation Error', 'Please enter template content before previewing');
       return;
     }
 
-    setIsSaving(true);
-    try {
-      await onSave({
-        name,
-        category,
-        subjectTemplate: subjectTemplate || undefined,
-        contentTemplate,
-        variables,
-        conditions,
-        isActive
-      });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save template');
-    } finally {
-      setIsSaving(false);
+    if (channel === 'email' && !subject.trim()) {
+      Alert.alert('Validation Error', 'Email templates require a subject for preview');
+      return;
     }
-  }, [name, category, subjectTemplate, contentTemplate, variables, conditions, isActive, template, onSave]);
 
-  const renderVariableList = () => (
-    <View style={styles.variablesSection}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Template Variables</Text>
-        <TouchableOpacity onPress={handleAddVariable} style={styles.addButton}>
-          <MaterialIcons name="add" size={20} color="#007AFF" />
-          <Text style={styles.addButtonText}>Add Variable</Text>
-        </TouchableOpacity>
-      </View>
+    try {
+      const templateData = {
+        id: template?.id || 'preview',
+        name: name.trim() || 'Preview Template',
+        description: description.trim(),
+        category,
+        channel,
+        status: 'draft',
+        subject: channel === 'email' ? subject.trim() : undefined,
+        content: content.trim(),
+        variables: availableVariables,
+        conditions: template?.conditions || [],
+        tags: template?.tags || [],
+        priority: template?.priority || 1,
+        isDefault: template?.isDefault || false,
+        createdBy: template?.createdBy || 1,
+        updatedBy: 1,
+        createdAt: template?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        currentVersion: {
+          id: template?.currentVersion?.id || '1',
+          version: template?.currentVersion?.version || 1,
+          templateId: template?.id || 'preview',
+          content: content.trim(),
+          subject: channel === 'email' ? subject.trim() : undefined,
+          variables: availableVariables,
+          conditions: template?.conditions || [],
+          createdBy: template?.createdBy || 1,
+          createdAt: template?.createdAt || new Date().toISOString(),
+          changeLog: 'Preview version',
+          isActive: true,
+        },
+        versions: template?.versions || [],
+      };
 
-      {Object.entries(variables).map(([varName, variable]) => (
-        <VariableInput
-          key={varName}
-          variable={variable}
-          onUpdate={(updated) => handleUpdateVariable(varName, updated)}
-          onRemove={() => handleRemoveVariable(varName)}
-        />
-      ))}
+      const result = await templateRenderingService.previewTemplate(templateData as CommunicationTemplate);
 
-      {Object.keys(variables).length === 0 && (
-        <Text style={styles.emptyText}>No variables defined. Add variables to personalize your template.</Text>
+      if (!result || !result.content) {
+        throw new Error('Preview service returned invalid response');
+      }
+
+      setPreviewContent(result.content);
+      setIsPreviewMode(true);
+    } catch (error) {
+      console.error('Preview error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to preview template';
+      Alert.alert('Preview Error', errorMessage);
+    }
+  };
+
+  const insertVariable = useCallback((variable: TemplateVariable) => {
+    const variableText = `{{${variable.name}}}`;
+    const currentContent = content;
+
+    // Use the tracked cursor position or fallback to end of content
+    const insertPosition = cursorPosition >= 0 ? cursorPosition : currentContent.length;
+
+    const newContent = currentContent.slice(0, insertPosition) + variableText + currentContent.slice(insertPosition);
+    setContent(newContent);
+
+    // Update cursor position to after the inserted variable
+    const newCursorPosition = insertPosition + variableText.length;
+    setCursorPosition(newCursorPosition);
+
+    // Focus back to content input and set cursor position
+    setTimeout(() => {
+      contentInputRef.current?.focus();
+      // Note: React Native TextInput doesn't have a direct way to set cursor position
+      // This would require a more complex solution with a custom text input component
+    }, 100);
+  }, [content, cursorPosition]);
+
+  const handleSave = () => {
+    if (!name.trim()) {
+      Alert.alert('Validation Error', 'Template name is required');
+      return;
+    }
+
+    if (!content.trim()) {
+      Alert.alert('Validation Error', 'Template content is required');
+      return;
+    }
+
+    if (channel === 'email' && !subject.trim()) {
+      Alert.alert('Validation Error', 'Email templates require a subject');
+      return;
+    }
+
+    const templateData: CommunicationTemplate = {
+      id: template?.id || `template_${Date.now()}`,
+      name: name.trim(),
+      description: description.trim(),
+      category,
+      channel,
+      status: 'draft' as TemplateStatus,
+      subject: channel === 'email' ? subject.trim() : undefined,
+      content: content.trim(),
+      variables: availableVariables,
+      conditions: template?.conditions || [],
+      tags: template?.tags || [],
+      priority: template?.priority || 1,
+      isDefault: template?.isDefault || false,
+      createdBy: template?.createdBy || 1,
+      updatedBy: 1,
+      createdAt: template?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      currentVersion: {
+        id: template?.currentVersion?.id || '1',
+        version: template?.currentVersion?.version || 1,
+        templateId: template?.id || `template_${Date.now()}`,
+        content: content.trim(),
+        subject: channel === 'email' ? subject.trim() : undefined,
+        variables: availableVariables,
+        conditions: template?.conditions || [],
+        createdBy: 1,
+        createdAt: new Date().toISOString(),
+        changeLog: isNew ? 'Initial creation' : 'Updated content',
+        isActive: true,
+      },
+      versions: template?.versions || [],
+    };
+
+    onSave(templateData);
+  };
+
+  const renderVariablePalette = () => (
+    <View style={styles.variablePalette}>
+      <Text style={styles.paletteTitle}>Available Variables</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        {availableVariables.map((variable) => (
+          <TouchableOpacity
+            key={variable.id}
+            style={styles.variableChip}
+            onPress={() => insertVariable(variable)}
+          >
+            <Text style={styles.variableChipText}>{variable.displayName}</Text>
+            <MaterialIcons name="add" size={16} color="#007bff" />
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const renderFormattingToolbar = () => (
+    <View style={styles.formattingToolbar}>
+      <TouchableOpacity style={styles.formatButton}>
+        <MaterialIcons name="format-bold" size={20} color="#666" />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.formatButton}>
+        <MaterialIcons name="format-italic" size={20} color="#666" />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.formatButton}>
+        <MaterialIcons name="format-underline" size={20} color="#666" />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.formatButton}>
+        <MaterialIcons name="format-list-bulleted" size={20} color="#666" />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.formatButton}>
+        <MaterialIcons name="link" size={20} color="#666" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderContentEditor = () => (
+    <View style={styles.contentContainer}>
+      {channel === 'email' && renderFormattingToolbar()}
+      <TextInput
+        ref={contentInputRef}
+        style={[
+          styles.contentInput,
+          channel === 'email' && styles.emailContentInput,
+          channel === 'sms' && styles.smsContentInput,
+        ]}
+        multiline
+        placeholder={`Enter ${channel} template content...`}
+        value={content}
+        onChangeText={(text) => {
+          setContent(text);
+          // Reset cursor position when content changes
+          setCursorPosition(text.length);
+        }}
+        onSelectionChange={(event) => {
+          // Track cursor position for variable insertion
+          const selection = event.nativeEvent.selection;
+          setCursorPosition(selection.start);
+        }}
+        textAlignVertical="top"
+        maxLength={channel === 'sms' ? 160 : undefined}
+        selection={{ start: cursorPosition, end: cursorPosition }}
+      />
+      {channel === 'sms' && (
+        <Text style={styles.charCount}>
+          {content.length}/160 characters
+        </Text>
       )}
     </View>
   );
 
-  const renderPreviewModal = () => (
-    <Modal visible={showPreview} animationType="slide" onRequestClose={() => setShowPreview(false)}>
-      <View style={styles.previewContainer}>
-        <View style={styles.previewHeader}>
-          <Text style={styles.previewTitle}>Template Preview</Text>
-          <TouchableOpacity onPress={() => setShowPreview(false)}>
-            <MaterialIcons name="close" size={24} color="#666" />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.previewContent}>
-          {preview?.subject && (
-            <View style={styles.previewSection}>
-              <Text style={styles.previewLabel}>Subject:</Text>
-              <Text style={styles.previewText}>{preview.subject}</Text>
-            </View>
-          )}
-
-          <View style={styles.previewSection}>
-            <Text style={styles.previewLabel}>Content:</Text>
-            <Text style={styles.previewText}>{preview.content}</Text>
-          </View>
-
-          {preview?.validationErrors.length > 0 && (
-            <View style={styles.previewSection}>
-              <Text style={styles.previewErrorLabel}>Errors:</Text>
-              {preview.validationErrors.map((error, index) => (
-                <Text key={index} style={styles.previewErrorText}>• {error}</Text>
-              ))}
-            </View>
-          )}
-        </ScrollView>
+  const renderPreview = () => (
+    <View style={styles.previewContainer}>
+      <View style={styles.previewHeader}>
+        <Text style={styles.previewTitle}>Template Preview</Text>
+        <TouchableOpacity onPress={() => setIsPreviewMode(false)}>
+          <MaterialIcons name="edit" size={24} color="#007bff" />
+        </TouchableOpacity>
       </View>
-    </Modal>
+      {channel === 'email' && subject && (
+        <View style={styles.subjectPreview}>
+          <Text style={styles.subjectLabel}>Subject:</Text>
+          <Text style={styles.subjectText}>{subject}</Text>
+        </View>
+      )}
+      <ScrollView style={styles.previewContent}>
+        <Text style={styles.previewText}>{previewContent}</Text>
+      </ScrollView>
+    </View>
   );
 
-  if (!isVisible) return null;
-
   return (
-    <Modal visible={isVisible} animationType="slide" onRequestClose={onCancel}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>
-            {template ? 'Edit Template' : 'Create Template'}
-          </Text>
-          <TouchableOpacity onPress={onCancel}>
-            <MaterialIcons name="close" size={24} color="#666" />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onCancel} style={styles.cancelButton}>
+          <MaterialIcons name="close" size={24} color="#666" />
+        </TouchableOpacity>
+        <Text style={styles.title}>
+          {isNew ? 'Create Template' : 'Edit Template'}
+        </Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={handlePreview} style={styles.previewButton}>
+            <MaterialIcons name="visibility" size={20} color="#007bff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
+            <MaterialIcons name="save" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
+      </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Basic Information */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Basic Information</Text>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        {isPreviewMode ? renderPreview() : (
+          <>
+            {/* Basic Information */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Basic Information</Text>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Template name"
-              value={name}
-              onChangeText={setName}
-            />
+              <TextInput
+                style={styles.input}
+                placeholder="Template name"
+                value={name}
+                onChangeText={setName}
+              />
 
-            <View style={styles.categoryPicker}>
-              <Text style={styles.categoryLabel}>Category:</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {categories.map((cat) => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.categoryOption, category === cat && styles.categorySelected]}
-                    onPress={() => setCategory(cat)}
-                  >
-                    <Text style={[styles.categoryText, category === cat && styles.categoryTextSelected]}>
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+              <TextInput
+                style={[styles.input, styles.multilineInput]}
+                placeholder="Template description"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={2}
+              />
 
-            <View style={styles.checkboxRow}>
-              <TouchableOpacity
-                style={[styles.checkbox, isActive && styles.checkboxChecked]}
-                onPress={() => setIsActive(!isActive)}
-              >
-                {isActive && <MaterialIcons name="check" size={16} color="#fff" />}
-              </TouchableOpacity>
-              <Text style={styles.checkboxLabel}>Active</Text>
-            </View>
-          </View>
+              {/* Category and Channel Selection */}
+              <View style={styles.row}>
+                <View style={styles.pickerContainer}>
+                  <Text style={styles.pickerLabel}>Category</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {Object.entries(TEMPLATE_CATEGORIES).map(([key, cat]) => (
+                      <TouchableOpacity
+                        key={key}
+                        style={[
+                          styles.categoryChip,
+                          category === key && styles.categoryChipSelected,
+                        ]}
+                        onPress={() => setCategory(key as TemplateCategory)}
+                      >
+                        <Text style={[
+                          styles.categoryChipText,
+                          category === key && styles.categoryChipTextSelected,
+                        ]}>
+                          {cat.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
 
-          {/* Subject Template */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Subject Template (Optional)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter subject template..."
-              value={subjectTemplate}
-              onChangeText={setSubjectTemplate}
-              multiline
-            />
-          </View>
-
-          {/* Content Template */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Content Template</Text>
-              <View style={styles.variableButtons}>
-                {Object.keys(variables).map((varName) => (
-                  <TouchableOpacity
-                    key={varName}
-                    style={styles.variableButton}
-                    onPress={() => handleInsertVariable(varName)}
-                  >
-                    <Text style={styles.variableButtonText}>{varName}</Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.row}>
+                <View style={styles.pickerContainer}>
+                  <Text style={styles.pickerLabel}>Channel</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {Object.entries(COMMUNICATION_CHANNELS).map(([key, ch]) => (
+                      <TouchableOpacity
+                        key={key}
+                        style={[
+                          styles.channelChip,
+                          channel === key && styles.channelChipSelected,
+                        ]}
+                        onPress={() => setChannel(key as CommunicationChannel)}
+                      >
+                        <Text style={[
+                          styles.channelChipText,
+                          channel === key && styles.channelChipTextSelected,
+                        ]}>
+                          {ch.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
               </View>
             </View>
 
-            <TextInput
-              style={[styles.input, styles.contentInput]}
-              placeholder="Enter your template content here... Use {{variableName}} to insert variables."
-              value={contentTemplate}
-              onChangeText={setContentTemplate}
-              multiline
-              textAlignVertical="top"
-            />
-          </View>
+            {/* Subject (for email only) */}
+            {channel === 'email' && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Email Subject</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email subject line"
+                  value={subject}
+                  onChangeText={setSubject}
+                />
+              </View>
+            )}
 
-          {/* Variables */}
-          {renderVariableList()}
+            {/* Variable Palette */}
+            {renderVariablePalette()}
 
-          {/* Validation Results */}
-          {validation && (
+            {/* Content Editor */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Validation</Text>
-              {validation.errors.length > 0 && (
-                <View style={styles.validationSection}>
-                  <Text style={styles.validationTitle}>Errors:</Text>
-                  {validation.errors.map((error, index) => (
-                    <Text key={index} style={styles.errorText}>• {error}</Text>
-                  ))}
-                </View>
-              )}
-              {validation.warnings.length > 0 && (
-                <View style={styles.validationSection}>
-                  <Text style={styles.validationTitle}>Warnings:</Text>
-                  {validation.warnings.map((warning, index) => (
-                    <Text key={index} style={styles.warningText}>• {warning}</Text>
-                  ))}
-                </View>
-              )}
+              <Text style={styles.sectionTitle}>
+                Template Content ({channel.toUpperCase()})
+              </Text>
+              {renderContentEditor()}
             </View>
-          )}
-        </ScrollView>
-
-        {/* Action Buttons */}
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={handleValidate}
-          >
-            <Text style={styles.secondaryButtonText}>Validate</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={handlePreview}
-          >
-            <Text style={styles.secondaryButtonText}>Preview</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, styles.cancelButton]}
-            onPress={onCancel}
-          >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, styles.primaryButton, isSaving && styles.disabledButton]}
-            onPress={handleSave}
-            disabled={isSaving}
-          >
-            <Text style={[styles.primaryButtonText, isSaving && styles.disabledText]}>
-              {isSaving ? 'Saving...' : 'Save'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Preview Modal */}
-        {renderPreviewModal()}
-      </View>
-    </Modal>
+          </>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -499,34 +496,47 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    backgroundColor: '#f8f9fa',
+  },
+  cancelButton: {
+    padding: 8,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  previewButton: {
+    padding: 8,
+  },
+  saveButton: {
+    backgroundColor: '#007bff',
+    padding: 8,
+    borderRadius: 6,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  section: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
   },
   input: {
     borderWidth: 1,
@@ -537,256 +547,160 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: '#fff',
   },
-  contentInput: {
-    minHeight: 120,
+  multilineInput: {
+    height: 80,
     textAlignVertical: 'top',
   },
-  categoryPicker: {
+  row: {
     marginBottom: 12,
   },
-  categoryLabel: {
-    fontSize: 16,
+  pickerContainer: {
+    marginBottom: 8,
+  },
+  pickerLabel: {
+    fontSize: 14,
     fontWeight: '500',
-    color: '#333',
+    color: '#666',
     marginBottom: 8,
   },
-  categoryOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+  categoryChip: {
     backgroundColor: '#f0f0f0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     marginRight: 8,
   },
-  categorySelected: {
-    backgroundColor: '#007AFF',
+  categoryChipSelected: {
+    backgroundColor: '#007bff',
   },
-  categoryText: {
+  categoryChipText: {
     fontSize: 14,
     color: '#666',
   },
-  categoryTextSelected: {
+  categoryChipTextSelected: {
     color: '#fff',
   },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderWidth: 2,
-    borderColor: '#ddd',
-    borderRadius: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  checkboxChecked: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  checkboxLabel: {
-    fontSize: 16,
-    color: '#333',
-  },
-  variablesSection: {
-    marginTop: 8,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-  },
-  addButtonText: {
-    fontSize: 14,
-    color: '#007AFF',
-    marginLeft: 4,
-  },
-  variableContainer: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: '#f9f9f9',
-  },
-  variableHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  variableTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  removeButton: {
-    padding: 4,
-  },
-  variableRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  typePicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  typeLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginRight: 8,
-  },
-  typeOption: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+  channelChip: {
     backgroundColor: '#f0f0f0',
-    marginRight: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
   },
-  typeOptionSelected: {
-    backgroundColor: '#007AFF',
+  channelChipSelected: {
+    backgroundColor: '#28a745',
   },
-  typeText: {
-    fontSize: 12,
+  channelChipText: {
+    fontSize: 14,
     color: '#666',
   },
-  typeTextSelected: {
+  channelChipTextSelected: {
     color: '#fff',
   },
-  emptyText: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    padding: 20,
-  },
-  variableButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  variableButton: {
-    backgroundColor: '#e0e0e0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 4,
-    marginBottom: 4,
-  },
-  variableButtonText: {
-    fontSize: 12,
-    color: '#333',
-  },
-  validationSection: {
-    marginTop: 8,
-  },
-  validationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#ff4444',
-    marginBottom: 2,
-  },
-  warningText: {
-    fontSize: 14,
-    color: '#ff8800',
-    marginBottom: 2,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  variablePalette: {
+    backgroundColor: '#f8f9fa',
     padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  button: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 80,
+  paletteTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  variableChip: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    gap: 4,
   },
-  primaryButton: {
-    backgroundColor: '#007AFF',
+  variableChipText: {
+    fontSize: 12,
+    color: '#1976d2',
+    fontWeight: '500',
   },
-  primaryButtonText: {
-    color: '#fff',
+  formattingToolbar: {
+    flexDirection: 'row',
+    backgroundColor: '#f8f9fa',
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  formatButton: {
+    padding: 8,
+    marginRight: 4,
+    borderRadius: 4,
+  },
+  contentContainer: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  contentInput: {
+    padding: 12,
     fontSize: 16,
-    fontWeight: '600',
+    minHeight: 200,
   },
-  secondaryButton: {
-    backgroundColor: '#f0f0f0',
+  emailContentInput: {
+    // Additional styling for email content
   },
-  secondaryButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '600',
+  smsContentInput: {
+    minHeight: 100,
   },
-  cancelButton: {
-    backgroundColor: '#ff4444',
-  },
-  cancelButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
-  },
-  disabledText: {
-    color: '#999',
+  charCount: {
+    textAlign: 'right',
+    fontSize: 12,
+    color: '#666',
+    padding: 8,
+    backgroundColor: '#f8f9fa',
   },
   previewContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    padding: 16,
   },
   previewHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    marginBottom: 16,
   },
   previewTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  subjectPreview: {
+    backgroundColor: '#f8f9fa',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  subjectLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 4,
+  },
+  subjectText: {
+    fontSize: 16,
     color: '#333',
   },
   previewContent: {
     flex: 1,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
     padding: 16,
-  },
-  previewSection: {
-    marginBottom: 16,
-  },
-  previewLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
   },
   previewText: {
     fontSize: 16,
-    color: '#666',
+    color: '#333',
     lineHeight: 24,
-  },
-  previewErrorLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ff4444',
-    marginBottom: 8,
-  },
-  previewErrorText: {
-    fontSize: 14,
-    color: '#ff4444',
-    marginBottom: 4,
   },
 });
 

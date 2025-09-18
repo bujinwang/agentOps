@@ -110,6 +110,46 @@ app.get('/health', healthCheck);
 app.get('/health/detailed', detailedHealthCheck);
 app.get('/metrics', metricsEndpoint);
 
+// Database performance monitoring endpoints
+app.get('/api/database/stats', async (req, res) => {
+  try {
+    const { getConnectionStats, getQueryStats } = require('./config/database');
+    const connectionStats = getConnectionStats();
+    const queryStats = getQueryStats();
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      connections: connectionStats,
+      queries: queryStats,
+      performance: {
+        avgQueryTime: queryStats.avgQueryTime,
+        slowQueryCount: queryStats.slowQueries,
+        totalQueries: queryStats.totalQueries
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching database stats:', error);
+    res.status(500).json({ error: 'Failed to fetch database statistics' });
+  }
+});
+
+app.post('/api/database/cache/clear', async (req, res) => {
+  try {
+    const { clearQueryCache } = require('./config/database');
+    const { pattern } = req.body;
+
+    clearQueryCache(pattern);
+    res.json({
+      success: true,
+      message: pattern ? `Cache cleared for pattern: ${pattern}` : 'All cache cleared',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error clearing cache:', error);
+    res.status(500).json({ error: 'Failed to clear cache' });
+  }
+});
+
 // API routes - unified endpoint structure
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadRoutes);
@@ -145,6 +185,10 @@ app.use('*', (req, res) => {
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
+// Store workflow interval reference for cleanup
+let workflowInterval = null;
+let serverInstance = null;
+
 // Start server
 async function startServer() {
   try {
@@ -177,49 +221,136 @@ async function startServer() {
       }
     }, 5 * 60 * 1000); // 5 minutes
 
+    // Prevent interval from keeping the process alive if unref is available
+    if (workflowInterval.unref) {
+      workflowInterval.unref();
+    }
+
     logger.info('Workflow scheduler started (runs every 5 minutes)');
 
     // Start the server
-    app.listen(PORT, () => {
+    serverInstance = app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
       logger.info(`API Documentation available at http://localhost:${PORT}/api-docs`);
       logger.info(`Metrics available at http://localhost:${PORT}/metrics`);
     });
 
+    // Handle server errors
+    serverInstance.on('error', (error) => {
+      logger.error('Server error:', error);
+      gracefulShutdown();
+    });
+
   } catch (error) {
     logger.error('Failed to start server:', error);
+    await gracefulShutdown();
     process.exit(1);
   }
 }
 
-// Store workflow interval reference for cleanup
-let workflowInterval;
-
 // Graceful shutdown
-const gracefulShutdown = async () => {
-  logger.info('Shutting down gracefully...');
+const gracefulShutdown = async (signal = 'unknown') => {
+  logger.info(`Shutting down gracefully... (signal: ${signal})`);
 
-  if (workflowInterval) {
-    clearInterval(workflowInterval);
-    logger.info('Workflow scheduler stopped');
+  // Start shutdown timeout
+  startShutdownTimeout();
+
+  try {
+    // Stop accepting new connections
+    if (serverInstance) {
+      logger.info('Stopping server...');
+      await new Promise((resolve) => {
+        serverInstance.close((err) => {
+          if (err) {
+            logger.error('Error closing server:', err);
+          } else {
+            logger.info('Server stopped accepting connections');
+          }
+          resolve();
+        });
+      });
+    }
+
+    // Clear workflow interval
+    if (workflowInterval) {
+      clearInterval(workflowInterval);
+      workflowInterval = null;
+      logger.info('Workflow scheduler stopped');
+    }
+
+    // Close database connections
+    try {
+      const { closeDatabase } = require('./config/database');
+      await closeDatabase();
+      logger.info('Database connections closed');
+    } catch (error) {
+      logger.error('Error closing database:', error);
+    }
+
+    // Close Redis connections
+    try {
+      const redis = require('./config/redis');
+      if (redis.closeRedis) {
+        await redis.closeRedis();
+        logger.info('Redis connections closed');
+      }
+    } catch (error) {
+      logger.error('Error closing Redis:', error);
+    }
+
+    // Clear shutdown timeout since we completed successfully
+    clearShutdownTimeout();
+
+    logger.info('Graceful shutdown completed');
+    process.exit(0);
+
+  } catch (error) {
+    logger.error('Error during graceful shutdown:', error);
+    clearShutdownTimeout();
+    process.exit(1);
   }
-
-  process.exit(0);
 };
 
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', error);
-  process.exit(1);
+  gracefulShutdown('uncaughtException').then(() => {
+    process.exit(1);
+  });
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
+  gracefulShutdown('unhandledRejection').then(() => {
+    process.exit(1);
+  });
 });
+
+// Handle process warnings
+process.on('warning', (warning) => {
+  logger.warn('Process warning:', warning.name, warning.message);
+});
+
+// Force exit after timeout during shutdown
+let shutdownTimeout;
+const SHUTDOWN_TIMEOUT = 10000; // 10 seconds
+
+function startShutdownTimeout() {
+  shutdownTimeout = setTimeout(() => {
+    logger.error('Shutdown timeout reached, forcing exit');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT);
+}
+
+function clearShutdownTimeout() {
+  if (shutdownTimeout) {
+    clearTimeout(shutdownTimeout);
+    shutdownTimeout = null;
+  }
+}
 
 startServer();
 

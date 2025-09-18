@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PerformanceInsight, InsightsFilters, PerformanceAnalysisResult } from '../../types/insights';
@@ -27,6 +27,8 @@ const InsightsDashboard: React.FC<InsightsDashboardProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const { deviceType, getResponsiveSpacing } = useResponsive();
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const categories = [
     { key: 'all', label: 'All', icon: 'view-list' },
@@ -39,6 +41,14 @@ const InsightsDashboard: React.FC<InsightsDashboardProps> = ({
   ];
 
   const loadInsights = useCallback(async (isRefresh = false) => {
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -49,24 +59,55 @@ const InsightsDashboard: React.FC<InsightsDashboardProps> = ({
       if (leadId) {
         // Load lead-specific insights
         const leadInsights = await performanceInsightsService.analyzeLeadPerformance(leadId);
-        setInsights(leadInsights.insights);
+
+        // Check if component is still mounted and request wasn't aborted
+        if (isMountedRef.current && !abortControllerRef.current.signal.aborted) {
+          setInsights(leadInsights.insights);
+        }
       } else {
         // Load overall performance insights
         const analysis = await performanceInsightsService.analyzeOverallPerformance(filters);
-        setOverallAnalysis(analysis);
-        setInsights(analysis.insights);
+
+        // Check if component is still mounted and request wasn't aborted
+        if (isMountedRef.current && !abortControllerRef.current.signal.aborted) {
+          setOverallAnalysis(analysis);
+          setInsights(analysis.insights);
+        }
       }
     } catch (error) {
+      // Don't show error if request was aborted
+      if (error.name === 'AbortError' || abortControllerRef.current?.signal.aborted) {
+        return;
+      }
+
       console.error('Failed to load insights:', error);
-      Alert.alert('Error', 'Failed to load insights. Please try again.');
+
+      // Only show alert if component is still mounted
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Failed to load insights. Please try again.');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [leadId, filters]);
 
   useEffect(() => {
     loadInsights();
+
+    // Cleanup function
+    return () => {
+      isMountedRef.current = false;
+
+      // Cancel any ongoing requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
   }, [loadInsights]);
 
   const handleRefresh = useCallback(() => {

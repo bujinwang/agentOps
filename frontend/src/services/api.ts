@@ -84,7 +84,7 @@ class ApiService {
   }
 
   // Public method with loading support
-  public async requestWithLoading<T = any>(
+  public async requestWithLoading<T>(
     endpoint: string,
     options: RequestInit = {},
     loadingCallbacks?: LoadingCallbacks
@@ -93,7 +93,7 @@ class ApiService {
   }
 
   // Generic HTTP request method with loading support
-  private async request<T = any>(
+  private async request<T>(
     endpoint: string,
     options: RequestInit = {},
     loadingCallbacks?: LoadingCallbacks
@@ -153,7 +153,11 @@ class ApiService {
         }
         
         // Create a custom error object that includes validation details
-        const enhancedError = new Error(errorMessage) as any;
+        const enhancedError = new Error(errorMessage) as Error & {
+          status: number;
+          details?: any;
+          url: string;
+        };
         enhancedError.status = response.status;
         enhancedError.details = errorDetails;
         enhancedError.url = url;
@@ -193,7 +197,23 @@ class ApiService {
   // Authentication endpoints
   async login(credentials: LoginForm): Promise<LoginResponse> {
     console.log('Login request:', { endpoint: '/api/auth/login', credentials: { ...credentials, password: '[REDACTED]' } });
-    const response = await this.request<any>('/api/auth/login', {
+    const response = await this.request<{
+      message: string;
+      data?: {
+        user?: {
+          userId: number;
+          email: string;
+          firstName: string;
+        };
+        tokens?: {
+          accessToken: string;
+          refreshToken?: string;
+        };
+      };
+      userId?: number;
+      email?: string;
+      firstName?: string;
+    }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
@@ -387,7 +407,13 @@ class ApiService {
   }
 
   // Tasks endpoints
-  async getTasks(params?: any): Promise<{ data: Task[] }> {
+  async getTasks(params?: {
+    completed?: boolean;
+    priority?: string;
+    leadId?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ data: Task[] }> {
     const searchParams = new URLSearchParams();
     
     if (params) {
@@ -441,8 +467,10 @@ class ApiService {
 
   async addInteraction(interactionData: {
     leadId: number;
-    type: string;
+    type: 'call' | 'email' | 'meeting' | 'note' | 'task';
     content?: string;
+    duration?: number;
+    outcome?: string;
   }): Promise<ApiResponse<Interaction>> {
     return this.request('/api/interactions', {
       method: 'POST',
@@ -452,9 +480,11 @@ class ApiService {
 
   async getInteractions(params?: {
     leadId?: number;
-    type?: string;
+    type?: 'call' | 'email' | 'meeting' | 'note' | 'task';
     limit?: number;
     page?: number;
+    startDate?: string;
+    endDate?: string;
   }): Promise<{ data: Interaction[] }> {
     const searchParams = new URLSearchParams();
     
@@ -522,16 +552,23 @@ class ApiService {
 
   // Search endpoints
   async searchLeads(query: string, filters?: {
-    status?: string;
-    priority?: string;
+    status?: 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'closed' | 'lost';
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
     source?: string;
+    assignedTo?: number;
+    tags?: string[];
   }): Promise<{ data: Lead[] }> {
     const searchParams = new URLSearchParams({ q: query });
     
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
-        if (value) {
-          searchParams.append(key, value);
+        if (value !== undefined && value !== null && value !== '') {
+          if (Array.isArray(value)) {
+            // Handle array values (like tags)
+            value.forEach(item => searchParams.append(key, item.toString()));
+          } else {
+            searchParams.append(key, value.toString());
+          }
         }
       });
     }
@@ -543,8 +580,10 @@ class ApiService {
 
   async searchTasks(query: string, filters?: {
     completed?: boolean;
-    priority?: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
     leadId?: number;
+    assignedTo?: number;
+    dueDate?: string;
   }): Promise<{ data: Task[] }> {
     const searchParams = new URLSearchParams({ q: query });
     
@@ -562,13 +601,26 @@ class ApiService {
   }
 
   // Export/Import endpoints
-  async exportLeads(format: 'csv' | 'excel' = 'csv', filters?: any): Promise<Blob> {
+  async exportLeads(format: 'csv' | 'excel' = 'csv', filters?: {
+    status?: string;
+    priority?: string;
+    source?: string;
+    assignedTo?: number;
+    startDate?: string;
+    endDate?: string;
+    tags?: string[];
+  }): Promise<Blob> {
     const searchParams = new URLSearchParams({ format });
     
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
-          searchParams.append(key, value.toString());
+          if (Array.isArray(value)) {
+            // Handle array values (like tags)
+            value.forEach(item => searchParams.append(key, item.toString()));
+          } else {
+            searchParams.append(key, value.toString());
+          }
         }
       });
     }
@@ -610,9 +662,20 @@ class ApiService {
   // Notification endpoints
   async getNotifications(params?: {
     read?: boolean;
-    type?: string;
+    type?: 'lead' | 'task' | 'system' | 'reminder';
     limit?: number;
-  }): Promise<{ data: any[] }> {
+    offset?: number;
+    priority?: 'low' | 'medium' | 'high';
+  }): Promise<{ data: Array<{
+    id: number;
+    type: string;
+    title: string;
+    message: string;
+    read: boolean;
+    priority: string;
+    createdAt: string;
+    data?: any;
+  }> }> {
     const searchParams = new URLSearchParams();
     
     if (params) {
@@ -648,7 +711,20 @@ class ApiService {
     firstName?: string;
     lastName?: string;
     phone?: string;
-    preferences?: any;
+    preferences?: {
+      theme?: 'light' | 'dark' | 'auto';
+      language?: string;
+      timezone?: string;
+      notifications?: {
+        email?: boolean;
+        push?: boolean;
+        sms?: boolean;
+      };
+      dashboard?: {
+        defaultView?: string;
+        widgets?: string[];
+      };
+    };
   }): Promise<ApiResponse> {
     return this.request('/api/profile', {
       method: 'PUT',
@@ -697,7 +773,16 @@ class ApiService {
     });
   }
 
-  async updateScoringCriteria(criteria: any): Promise<ApiResponse> {
+  async updateScoringCriteria(criteria: {
+    weights: Record<string, number>;
+    thresholds: Record<string, number>;
+    rules: Array<{
+      field: string;
+      operator: 'gt' | 'lt' | 'eq' | 'contains';
+      value: any;
+      score: number;
+    }>;
+  }): Promise<ApiResponse> {
     return this.request('/api/scoring/criteria', {
       method: 'PUT',
       body: JSON.stringify(criteria),
@@ -712,8 +797,17 @@ class ApiService {
 
   async updateLeadScore(leadId: number, scoreData: {
     score: number;
-    category: string;
-    breakdown: any;
+    category: 'hot' | 'warm' | 'cold';
+    breakdown: {
+      factors: Array<{
+        name: string;
+        value: number;
+        weight: number;
+        contribution: number;
+      }>;
+      totalScore: number;
+      confidence: number;
+    };
     manualOverride?: boolean;
     reason?: string;
   }): Promise<ApiResponse> {
@@ -758,7 +852,34 @@ class ApiService {
     });
   }
 
-  async createPersonalizedTemplate(templateData: any): Promise<{ template: any }> {
+  async createPersonalizedTemplate(templateData: {
+    name: string;
+    channel: 'email' | 'sms';
+    category: string;
+    subject?: string;
+    content: string;
+    variables: Array<{
+      name: string;
+      type: 'string' | 'number' | 'date';
+      required: boolean;
+      defaultValue?: any;
+    }>;
+    personalizationRules?: Array<{
+      condition: string;
+      action: string;
+      priority: number;
+    }>;
+  }): Promise<{ template: {
+    id: number;
+    name: string;
+    channel: string;
+    category: string;
+    subject?: string;
+    content: string;
+    variables: any[];
+    createdAt: string;
+    updatedAt: string;
+  } }> {
     return this.request('/api/templates', {
       method: 'POST',
       body: JSON.stringify(templateData),
@@ -981,7 +1102,34 @@ class ApiService {
     });
   }
 
-  async createWorkflow(workflowData: any): Promise<{ data: any }> {
+  async createWorkflow(workflowData: {
+    name: string;
+    description: string;
+    trigger: {
+      type: 'lead_created' | 'lead_updated' | 'score_changed' | 'manual';
+      conditions?: Array<{
+        field: string;
+        operator: 'eq' | 'gt' | 'lt' | 'contains';
+        value: any;
+      }>;
+    };
+    steps: Array<{
+      id: string;
+      type: 'email' | 'sms' | 'wait' | 'condition' | 'action';
+      config: Record<string, any>;
+      nextStep?: string;
+    }>;
+    isActive: boolean;
+  }): Promise<{ data: {
+    id: number;
+    name: string;
+    description: string;
+    trigger: any;
+    steps: any[];
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+  } }> {
     return this.request('/api/workflows', {
       method: 'POST',
       body: JSON.stringify(workflowData),
@@ -1027,7 +1175,37 @@ class ApiService {
     });
   }
 
-  async createExperiment(experimentData: any): Promise<{ experiment: any }> {
+  async createExperiment(experimentData: {
+    name: string;
+    description: string;
+    templateId: number;
+    variants: Array<{
+      id: string;
+      name: string;
+      content: string;
+      weight: number;
+    }>;
+    targetMetric: 'open_rate' | 'click_rate' | 'conversion_rate' | 'response_rate';
+    targetValue: number;
+    sampleSize: number;
+    duration: number; // in days
+    startDate?: string;
+  }): Promise<{ experiment: {
+    id: number;
+    name: string;
+    description: string;
+    templateId: number;
+    variants: any[];
+    status: 'draft' | 'running' | 'completed' | 'stopped';
+    targetMetric: string;
+    targetValue: number;
+    sampleSize: number;
+    duration: number;
+    startDate?: string;
+    endDate?: string;
+    createdAt: string;
+    updatedAt: string;
+  } }> {
     return this.request('/api/experiments', {
       method: 'POST',
       body: JSON.stringify(experimentData),
@@ -1069,6 +1247,179 @@ class ApiService {
     return this.request(`/api/experiments/${experimentId}/record-result`, {
       method: 'POST',
       body: JSON.stringify({ leadId, metricValue, conversionOccurred }),
+    });
+  }
+
+  // ML Scoring endpoints
+  async scoreLead(leadId: number): Promise<{ success: boolean; data: { score: number; confidence: number; modelVersion: string; featuresUsed: string[]; scoredAt: string } }> {
+    return this.request(`/api/scoring/lead/${leadId}`, {
+      method: 'POST',
+    });
+  }
+
+  async scoreLeadWithData(leadData: {
+    leadId?: number;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    createdAt?: string;
+  }): Promise<{ success: boolean; data: { score: number; confidence: number; modelVersion: string; featuresUsed: string[]; scoredAt: string } }> {
+    return this.request('/api/scoring/data', {
+      method: 'POST',
+      body: JSON.stringify(leadData),
+    });
+  }
+
+  async batchScoreLeads(leadIds: number[]): Promise<{ success: boolean; data: { totalRequested: number; results: Array<{ leadId: number; score: number; confidence: number; error?: string }> } }> {
+    return this.request('/api/scoring/batch', {
+      method: 'POST',
+      body: JSON.stringify({ leadIds }),
+    });
+  }
+
+  async getLeadScoringHistory(leadId: number, limit?: number, offset?: number): Promise<{ success: boolean; data: { leadId: number; history: Array<{ id: number; score: number; confidence: number; modelVersion: string; featuresUsed: string[]; scoredAt: string }>; pagination: { limit: number; offset: number; count: number } } }> {
+    const searchParams = new URLSearchParams();
+    if (limit) searchParams.append('limit', limit.toString());
+    if (offset) searchParams.append('offset', offset.toString());
+
+    const queryString = searchParams.toString();
+    const endpoint = `/api/scoring/lead/${leadId}/history${queryString ? `?${queryString}` : ''}`;
+
+    return this.request(endpoint, {
+      method: 'GET',
+    });
+  }
+
+  async getLeadInsights(leadId: number): Promise<{ success: boolean; data: { leadId: number; latestScore: any; explanation: { leadId: number; score: number; confidence: number; topFactors: Array<{ feature: string; value: number; impact: number; direction: string; explanation: string }>; featureContributions: any; similarLeads: Array<{ id: number; name: string; score: number; confidence: number; similarity: number }>; scoreDistribution: any; recommendations: Array<{ type: string; priority: string; message: string; actions: string[] }>; generatedAt: string } } }> {
+    return this.request(`/api/scoring/insights/lead/${leadId}`, {
+      method: 'GET',
+    });
+  }
+
+  async getFeatureImportance(): Promise<{ success: boolean; data: { topFeatures: Array<{ feature: string; importance: number; direction: string }>; allFeatures: Array<{ feature: string; importance: number; direction: string }>; analysisDate: string } }> {
+    return this.request('/api/scoring/features/importance', {
+      method: 'GET',
+    });
+  }
+
+  async getModelMetrics(): Promise<{ success: boolean; data: { models: Record<string, Array<{ metric: string; value: number; timestamp: string }>>; summary: { totalModels: number; totalAlerts: number } } }> {
+    return this.request('/api/scoring/metrics', {
+      method: 'GET',
+    });
+  }
+
+  async getScoringStats(): Promise<{ success: boolean; data: { period: string; summary: { totalScores: number; uniqueLeads: number; averageScore: number; scoreRange: { min: number; max: number }; averageConfidence: number; highScores: number; lowScores: number; timeRange: { first: string; last: string } }; hourlyDistribution: Array<{ hour: string; count: number }> } }> {
+    return this.request('/api/scoring/stats', {
+      method: 'GET',
+    });
+  }
+
+  // ML Model Management endpoints
+  async getMLModels(): Promise<{ success: boolean; data: { models: Array<{ modelId: string; modelType: string; version: string; status: string; accuracy: number; precision: number; recall: number; f1Score: number; trainingDate: string; createdAt: string }>; total: number } }> {
+    return this.request('/api/ml/models', {
+      method: 'GET',
+    });
+  }
+
+  async getMLModel(modelId: string): Promise<{ success: boolean; data: { modelId: string; modelType: string; version: string; status: string; accuracy: number; precision: number; recall: number; f1Score: number; trainingDate: string; metadata: any; createdAt: string } }> {
+    return this.request(`/api/ml/models/${modelId}`, {
+      method: 'GET',
+    });
+  }
+
+  async trainMLModel(modelType?: 'baseline' | 'advanced' | 'ensemble', forceRetrain?: boolean): Promise<{ success: boolean; message: string; data?: { trainingCompleted: boolean; modelType: string } }> {
+    return this.request('/api/ml/models/train', {
+      method: 'POST',
+      body: JSON.stringify({ modelType, forceRetrain }),
+    });
+  }
+
+  async deployMLModel(modelId: string, setAsActive?: boolean): Promise<{ success: boolean; message: string; data: { modelId: string; deployed: boolean; setAsActive: boolean } }> {
+    return this.request(`/api/ml/models/${modelId}/deploy`, {
+      method: 'POST',
+      body: JSON.stringify({ setAsActive }),
+    });
+  }
+
+  async deleteMLModel(modelId: string): Promise<{ success: boolean; message: string; data: { modelId: string; deleted: boolean } }> {
+    return this.request(`/api/ml/models/${modelId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async extractLeadFeatures(leadId: number): Promise<{ success: boolean; data: { leadId: number; features: Record<string, any>; extractedAt: string } }> {
+    return this.request(`/api/ml/features/extract/${leadId}`, {
+      method: 'GET',
+    });
+  }
+
+  async getMLHealth(): Promise<{ success: boolean; data: { service: string; status: string; timestamp: string; checks: any; monitoring: { active: boolean; interval: string; lastCycle: string } } }> {
+    return this.request('/api/ml/health', {
+      method: 'GET',
+    });
+  }
+
+  // Model Monitoring endpoints
+  async getModelMonitoringHealth(): Promise<{ success: boolean; data: { service: string; status: string; timestamp: string; checks: any; monitoring: { active: boolean; interval: string; lastCycle: string } } }> {
+    return this.request('/api/model-monitoring/health', {
+      method: 'GET',
+    });
+  }
+
+  async getModelMonitoringMetrics(startDate?: string, endDate?: string, hours?: number): Promise<{ success: boolean; data: { timeRange: { start: string; end: string; hours: number }; models: Record<string, Array<{ metric: string; value: number; timestamp: string }>>; alerts: Array<{ modelId: string; type: string; severity: string; details: any; timestamp: string }>; summary: { totalModels: number; totalAlerts: number } } }> {
+    const searchParams = new URLSearchParams();
+    if (startDate) searchParams.append('startDate', startDate);
+    if (endDate) searchParams.append('endDate', endDate);
+    if (hours) searchParams.append('hours', hours.toString());
+
+    const queryString = searchParams.toString();
+    const endpoint = `/api/model-monitoring/metrics${queryString ? `?${queryString}` : ''}`;
+
+    return this.request(endpoint, {
+      method: 'GET',
+    });
+  }
+
+  async getModelDriftDetection(hours?: number): Promise<{ success: boolean; data: { timeRange: { start: string; end: string; hours: number }; alerts: Array<{ modelId: string; type: string; severity: string; details: any; timestamp: string }>; trends: Record<string, { dataPoints: number; recentAvgAccuracy: number; olderAvgAccuracy: number; accuracyChangePercent: number; trend: string; timeRange: { start: string; end: string } }>; recommendations: Array<{ type: string; priority: string; action: string; reason: string }> } }> {
+    const searchParams = new URLSearchParams();
+    if (hours) searchParams.append('hours', hours.toString());
+
+    const queryString = searchParams.toString();
+    const endpoint = `/api/model-monitoring/drift-detection${queryString ? `?${queryString}` : ''}`;
+
+    return this.request(endpoint, {
+      method: 'GET',
+    });
+  }
+
+  async getModelPerformance(modelId: string, hours?: number): Promise<{ success: boolean; data: { modelId: string; modelInfo: { type: string; version: string; baselineAccuracy: number; trainingDate: string }; timeRange: { start: string; end: string; hours: number }; metrics: Array<{ metric: string; value: number; timestamp: string }>; analysis: Record<string, { currentValue: number; recentAverage: number; changePercent: number; trend: string; volatility: number; dataPoints: number }>; recommendations: Array<{ metric: string; type: string; priority: string; action: string; reason: string }> } }> {
+    const searchParams = new URLSearchParams();
+    if (hours) searchParams.append('hours', hours.toString());
+
+    const queryString = searchParams.toString();
+    const endpoint = `/api/model-monitoring/performance/${modelId}${queryString ? `?${queryString}` : ''}`;
+
+    return this.request(endpoint, {
+      method: 'GET',
+    });
+  }
+
+  async getModelFeatureImportance(): Promise<{ success: boolean; data: { topFeatures: Array<{ feature: string; importance: number; direction: string }>; allFeatures: Array<{ feature: string; importance: number; direction: string }>; analysisDate: string } }> {
+    return this.request('/api/model-monitoring/feature-importance', {
+      method: 'GET',
+    });
+  }
+
+  async getModelAlerts(hours?: number): Promise<{ success: boolean; data: { timeRange: { start: string; end: string; hours: number }; totalAlerts: number; alertsByType: Record<string, Array<{ modelId: string; type: string; severity: string; message: string; details: any; timestamp: string }>>; recentAlerts: Array<{ modelId: string; type: string; severity: string; message: string; details: any; timestamp: string }> } }> {
+    const searchParams = new URLSearchParams();
+    if (hours) searchParams.append('hours', hours.toString());
+
+    const queryString = searchParams.toString();
+    const endpoint = `/api/model-monitoring/alerts${queryString ? `?${queryString}` : ''}`;
+
+    return this.request(endpoint, {
+      method: 'GET',
     });
   }
 }

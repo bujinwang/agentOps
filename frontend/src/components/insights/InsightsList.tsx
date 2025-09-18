@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, FlatList, Text, StyleSheet, RefreshControl } from 'react-native';
 import { PerformanceInsight } from '../../types/insights';
 import { MaterialColors, MaterialSpacing, MaterialTypography } from '../../styles/MaterialDesign';
@@ -37,15 +37,17 @@ const InsightsList: React.FC<InsightsListProps> = ({
     </View>
   );
 
-  const sortedInsights = [...insights].sort((a, b) => {
-    // Sort by impact first (high > medium > low)
-    const impactOrder = { high: 3, medium: 2, low: 1 };
-    const impactDiff = impactOrder[b.impact] - impactOrder[a.impact];
-    if (impactDiff !== 0) return impactDiff;
+  const sortedInsights = useMemo(() => {
+    return [...insights].sort((a, b) => {
+      // Sort by impact first (high > medium > low)
+      const impactOrder = { high: 3, medium: 2, low: 1 };
+      const impactDiff = impactOrder[b.impact] - impactOrder[a.impact];
+      if (impactDiff !== 0) return impactDiff;
 
-    // Then by confidence
-    return b.confidence - a.confidence;
-  });
+      // Then by confidence
+      return b.confidence - a.confidence;
+    });
+  }, [insights]);
 
   return (
     <FlatList

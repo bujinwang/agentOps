@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,230 +6,300 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Alert,
   FlatList,
-  Alert
+  Dimensions,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { useCommunicationTemplates } from '../hooks/useCommunicationTemplates';
-import { CommunicationTemplate, TemplateCategory, TemplateSearchFilters } from '../types/communication';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { CommunicationTemplate, TemplateCategory, CommunicationChannel, TemplateSearchFilters } from '../types/template';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 interface TemplateLibraryProps {
+  templates: CommunicationTemplate[];
   onSelectTemplate: (template: CommunicationTemplate) => void;
-  onCreateTemplate: () => void;
+  onCreateNew: () => void;
   onEditTemplate: (template: CommunicationTemplate) => void;
+  onDeleteTemplate: (templateId: string) => void;
+  onDuplicateTemplate: (template: CommunicationTemplate) => void;
 }
 
 interface TemplateCardProps {
   template: CommunicationTemplate;
   onSelect: () => void;
   onEdit: () => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
 }
 
-const TemplateCard: React.FC<TemplateCardProps> = ({ template, onSelect, onEdit }) => {
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      onboarding: '#4CAF50',
-      followup: '#2196F3',
-      engagement: '#FF9800',
-      nurturing: '#9C27B0',
-      closing: '#F44336',
-      retention: '#795548',
-      reactivation: '#607D8B'
-    };
-    return colors[category] || '#666';
+const TemplateCard: React.FC<TemplateCardProps> = ({
+  template,
+  onSelect,
+  onEdit,
+  onDelete,
+  onDuplicate,
+}) => {
+  const getChannelIcon = (channel: CommunicationChannel) => {
+    switch (channel) {
+      case 'email': return 'email';
+      case 'sms': return 'message-text';
+      case 'in_app': return 'cellphone';
+      case 'push': return 'bell';
+      default: return 'email';
+    }
+  };
+
+  const getChannelColor = (channel: CommunicationChannel) => {
+    switch (channel) {
+      case 'email': return '#007bff';
+      case 'sms': return '#28a745';
+      case 'in_app': return '#6f42c1';
+      case 'push': return '#fd7e14';
+      default: return '#6c757d';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active': return '#28a745';
+      case 'draft': return '#ffc107';
+      case 'testing': return '#17a2b8';
+      case 'archived': return '#6c757d';
+      default: return '#6c757d';
+    }
   };
 
   return (
     <TouchableOpacity style={styles.templateCard} onPress={onSelect}>
-      <View style={styles.templateHeader}>
-        <View style={styles.categoryBadge}>
-          <Text style={[styles.categoryText, { color: getCategoryColor(template.category) }]}>
-            {template.category}
+      <View style={styles.cardHeader}>
+        <View style={styles.titleRow}>
+          <MaterialCommunityIcons
+            name={getChannelIcon(template.channel)}
+            size={20}
+            color={getChannelColor(template.channel)}
+          />
+          <Text style={styles.templateName} numberOfLines={1}>
+            {template.name}
           </Text>
         </View>
-        <TouchableOpacity onPress={onEdit} style={styles.editButton}>
-          <MaterialIcons name="edit" size={20} color="#666" />
-        </TouchableOpacity>
+        <View style={styles.actionButtons}>
+          <TouchableOpacity onPress={onEdit} style={styles.actionButton}>
+            <MaterialIcons name="edit" size={16} color="#666" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onDuplicate} style={styles.actionButton}>
+            <MaterialIcons name="content-copy" size={16} color="#666" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onDelete} style={styles.actionButton}>
+            <MaterialIcons name="delete" size={16} color="#dc3545" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <Text style={styles.templateName}>{template.name}</Text>
-
-      {template.subjectTemplate && (
-        <Text style={styles.templateSubject} numberOfLines={1}>
-          {template.subjectTemplate}
-        </Text>
-      )}
-
-      <Text style={styles.templateContent} numberOfLines={2}>
-        {template.contentTemplate}
+      <Text style={styles.templateDescription} numberOfLines={2}>
+        {template.description}
       </Text>
 
-      <View style={styles.templateFooter}>
-        <Text style={styles.variableCount}>
-          {Object.keys(template.variables).length} variables
-        </Text>
-        <View style={[styles.statusBadge, template.isActive && styles.activeBadge]}>
-          <Text style={[styles.statusText, template.isActive && styles.activeText]}>
-            {template.isActive ? 'Active' : 'Inactive'}
+      <View style={styles.cardFooter}>
+        <View style={styles.tagsRow}>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(template.status) }]}>
+            <Text style={styles.statusText}>{template.status}</Text>
+          </View>
+          <Text style={styles.categoryText}>
+            {TEMPLATE_CATEGORIES[template.category]?.name || template.category}
           </Text>
+        </View>
+
+        <View style={styles.statsRow}>
+          {template.performance && (
+            <>
+              <Text style={styles.statText}>
+                {template.performance.usageCount} uses
+              </Text>
+              {template.performance.openRate > 0 && (
+                <Text style={styles.statText}>
+                  {Math.round(template.performance.openRate * 100)}% open
+                </Text>
+              )}
+            </>
+          )}
         </View>
       </View>
     </TouchableOpacity>
   );
 };
 
-const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
+export const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
+  templates,
   onSelectTemplate,
-  onCreateTemplate,
-  onEditTemplate
+  onCreateNew,
+  onEditTemplate,
+  onDeleteTemplate,
+  onDuplicateTemplate,
 }) => {
-  const {
-    templates,
-    templateLibrary,
-    isLoading,
-    error,
-    fetchTemplateLibrary
-  } = useCommunicationTemplates();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
+  const [selectedChannel, setSelectedChannel] = useState<CommunicationChannel | 'all'>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string | 'all'>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'usage' | 'performance' | 'created'>('name');
+  const [filteredTemplates, setFilteredTemplates] = useState<CommunicationTemplate[]>(templates);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [showActiveOnly, setShowActiveOnly] = useState(true);
+  useEffect(() => {
+    filterAndSortTemplates();
+  }, [templates, searchQuery, selectedCategory, selectedChannel, selectedStatus, sortBy]);
 
-  // Filter templates based on search and filters
-  const filteredTemplates = useMemo(() => {
-    let filtered = templates;
+  const filterAndSortTemplates = () => {
+    let filtered = templates.filter(template => {
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch =
+          template.name.toLowerCase().includes(query) ||
+          template.description.toLowerCase().includes(query) ||
+          template.content.toLowerCase().includes(query) ||
+          template.tags.some(tag => tag.toLowerCase().includes(query));
 
-    // Search filter
-    if (searchTerm) {
-      filtered = filtered.filter(template =>
-        template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        template.contentTemplate.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        template.category.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
+        if (!matchesSearch) return false;
+      }
 
-    // Category filter
-    if (selectedCategory) {
-      filtered = filtered.filter(template => template.category === selectedCategory);
-    }
+      // Category filter
+      if (selectedCategory !== 'all' && template.category !== selectedCategory) {
+        return false;
+      }
 
-    // Active status filter
-    if (showActiveOnly) {
-      filtered = filtered.filter(template => template.isActive);
-    }
+      // Channel filter
+      if (selectedChannel !== 'all' && template.channel !== selectedChannel) {
+        return false;
+      }
 
-    return filtered;
-  }, [templates, searchTerm, selectedCategory, showActiveOnly]);
+      // Status filter
+      if (selectedStatus !== 'all' && template.status !== selectedStatus) {
+        return false;
+      }
 
-  // Get unique categories from templates
-  const categories = useMemo(() => {
-    const uniqueCategories = Array.from(new Set(templates.map(t => t.category)));
-    return uniqueCategories.sort();
-  }, [templates]);
+      return true;
+    });
 
-  const handleRefresh = () => {
-    fetchTemplateLibrary();
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'usage':
+          const aUsage = a.performance?.usageCount || 0;
+          const bUsage = b.performance?.usageCount || 0;
+          return bUsage - aUsage;
+        case 'performance':
+          const aPerf = a.performance?.conversionRate || 0;
+          const bPerf = b.performance?.conversionRate || 0;
+          return bPerf - aPerf;
+        case 'created':
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        default:
+          return 0;
+      }
+    });
+
+    setFilteredTemplates(filtered);
   };
 
-  const handleDeleteTemplate = (template: CommunicationTemplate) => {
+  const handleDeleteTemplate = (templateId: string) => {
     Alert.alert(
       'Delete Template',
-      `Are you sure you want to delete "${template.name}"?`,
+      'Are you sure you want to delete this template? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => {
-          // Implement delete functionality
-          console.log('Delete template:', template.id);
-        }}
+        { text: 'Delete', style: 'destructive', onPress: () => onDeleteTemplate(templateId) },
       ]
     );
   };
 
-  const renderCategoryFilter = () => (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.categoryFilter}
-    >
+  const renderFilterChips = () => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterChips}>
+      {/* Category Filter */}
       <TouchableOpacity
-        style={[styles.categoryChip, !selectedCategory && styles.categoryChipSelected]}
-        onPress={() => setSelectedCategory('')}
+        style={[styles.filterChip, selectedCategory === 'all' && styles.filterChipSelected]}
+        onPress={() => setSelectedCategory('all')}
       >
-        <Text style={[styles.categoryChipText, !selectedCategory && styles.categoryChipTextSelected]}>
-          All
+        <Text style={[styles.filterChipText, selectedCategory === 'all' && styles.filterChipTextSelected]}>
+          All Categories
         </Text>
       </TouchableOpacity>
 
-      {categories.map(category => (
+      {Object.entries(TEMPLATE_CATEGORIES).map(([key, category]) => (
         <TouchableOpacity
-          key={category}
-          style={[styles.categoryChip, selectedCategory === category && styles.categoryChipSelected]}
-          onPress={() => setSelectedCategory(category)}
+          key={key}
+          style={[styles.filterChip, selectedCategory === key && styles.filterChipSelected]}
+          onPress={() => setSelectedCategory(key as TemplateCategory)}
         >
-          <Text style={[styles.categoryChipText, selectedCategory === category && styles.categoryChipTextSelected]}>
-            {category}
+          <Text style={[styles.filterChipText, selectedCategory === key && styles.filterChipTextSelected]}>
+            {category.name}
           </Text>
         </TouchableOpacity>
       ))}
     </ScrollView>
   );
 
-  const renderTemplateGrid = () => (
-    <FlatList
-      data={filteredTemplates}
-      keyExtractor={(item) => item.id.toString()}
-      numColumns={2}
-      contentContainerStyle={styles.templateGrid}
-      showsVerticalScrollIndicator={false}
-      renderItem={({ item }) => (
-        <TemplateCard
-          template={item}
-          onSelect={() => onSelectTemplate(item)}
-          onEdit={() => onEditTemplate(item)}
-        />
-      )}
-      ListEmptyComponent={
-        <View style={styles.emptyState}>
-          <MaterialIcons name="inbox" size={48} color="#ccc" />
-          <Text style={styles.emptyStateText}>
-            {isLoading ? 'Loading templates...' : 'No templates found'}
-          </Text>
-          {!isLoading && (
-            <Text style={styles.emptyStateSubtext}>
-              {searchTerm || selectedCategory ? 'Try adjusting your filters' : 'Create your first template'}
-            </Text>
-          )}
-        </View>
-      }
-    />
+  const renderChannelFilter = () => (
+    <View style={styles.channelFilter}>
+      {Object.entries(COMMUNICATION_CHANNELS).map(([key, channel]) => (
+        <TouchableOpacity
+          key={key}
+          style={[
+            styles.channelFilterButton,
+            selectedChannel === key && styles.channelFilterButtonSelected,
+          ]}
+          onPress={() => setSelectedChannel(key as CommunicationChannel)}
+        >
+          <MaterialCommunityIcons
+            name={channel.icon as any}
+            size={16}
+            color={selectedChannel === key ? '#fff' : '#666'}
+          />
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity
+        style={[
+          styles.channelFilterButton,
+          selectedChannel === 'all' && styles.channelFilterButtonSelected,
+        ]}
+        onPress={() => setSelectedChannel('all')}
+      >
+        <MaterialIcons name="clear-all" size={16} color={selectedChannel === 'all' ? '#fff' : '#666'} />
+      </TouchableOpacity>
+    </View>
   );
 
-  if (error) {
-    return (
-      <View style={styles.errorContainer}>
-        <MaterialIcons name="error" size={48} color="#ff4444" />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+  const renderSortOptions = () => (
+    <View style={styles.sortOptions}>
+      <Text style={styles.sortLabel}>Sort by:</Text>
+      {[
+        { key: 'name', label: 'Name' },
+        { key: 'usage', label: 'Usage' },
+        { key: 'performance', label: 'Performance' },
+        { key: 'created', label: 'Created' },
+      ].map(option => (
+        <TouchableOpacity
+          key={option.key}
+          style={[styles.sortButton, sortBy === option.key && styles.sortButtonSelected]}
+          onPress={() => setSortBy(option.key as any)}
+        >
+          <Text style={[styles.sortButtonText, sortBy === option.key && styles.sortButtonTextSelected]}>
+            {option.label}
+          </Text>
         </TouchableOpacity>
-      </View>
-    );
-  }
+      ))}
+    </View>
+  );
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Template Library</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleRefresh} style={styles.refreshButton}>
-            <MaterialIcons name="refresh" size={24} color="#666" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onCreateTemplate} style={styles.createButton}>
-            <MaterialIcons name="add" size={20} color="#fff" />
-            <Text style={styles.createButtonText}>Create</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={onCreateNew} style={styles.createButton}>
+          <MaterialIcons name="add" size={20} color="#fff" />
+          <Text style={styles.createButtonText}>New Template</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Search */}
@@ -238,91 +308,120 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
         <TextInput
           style={styles.searchInput}
           placeholder="Search templates..."
-          value={searchTerm}
-          onChangeText={setSearchTerm}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
         />
-        {searchTerm ? (
-          <TouchableOpacity onPress={() => setSearchTerm('')} style={styles.clearButton}>
+        {searchQuery ? (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
             <MaterialIcons name="clear" size={20} color="#666" />
           </TouchableOpacity>
         ) : null}
       </View>
 
       {/* Filters */}
-      <View style={styles.filtersContainer}>
-        {renderCategoryFilter()}
+      {renderFilterChips()}
+      {renderChannelFilter()}
+      {renderSortOptions()}
 
-        <TouchableOpacity
-          style={[styles.filterChip, showActiveOnly && styles.filterChipSelected]}
-          onPress={() => setShowActiveOnly(!showActiveOnly)}
-        >
-          <Text style={[styles.filterChipText, showActiveOnly && styles.filterChipTextSelected]}>
-            Active Only
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Results Summary */}
-      <View style={styles.summaryContainer}>
-        <Text style={styles.summaryText}>
-          {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''} found
-        </Text>
-      </View>
+      {/* Results Count */}
+      <Text style={styles.resultsCount}>
+        {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''} found
+      </Text>
 
       {/* Template Grid */}
-      {renderTemplateGrid()}
+      <FlatList
+        data={filteredTemplates}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        contentContainerStyle={styles.templateGrid}
+        renderItem={({ item }) => (
+          <TemplateCard
+            template={item}
+            onSelect={() => onSelectTemplate(item)}
+            onEdit={() => onEditTemplate(item)}
+            onDelete={() => handleDeleteTemplate(item.id)}
+            onDuplicate={() => onDuplicateTemplate(item)}
+          />
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <MaterialIcons name="inbox" size={48} color="#ccc" />
+            <Text style={styles.emptyStateText}>No templates found</Text>
+            <Text style={styles.emptyStateSubtext}>
+              {searchQuery || selectedCategory !== 'all' || selectedChannel !== 'all'
+                ? 'Try adjusting your filters'
+                : 'Create your first template to get started'
+              }
+            </Text>
+          </View>
+        }
+      />
     </View>
   );
+};
+
+const TEMPLATE_CATEGORIES = {
+  initial_contact: { name: 'Initial Contact', icon: 'handshake' },
+  follow_up: { name: 'Follow-up', icon: 'clock' },
+  property_showing: { name: 'Property Showing', icon: 'home' },
+  proposal: { name: 'Proposal', icon: 'file-text' },
+  negotiation: { name: 'Negotiation', icon: 'scale' },
+  closing: { name: 'Closing', icon: 'trophy' },
+  thank_you: { name: 'Thank You', icon: 'heart' },
+  nurturing: { name: 'Nurturing', icon: 'seedling' },
+  re_engagement: { name: 'Re-engagement', icon: 'refresh' },
+};
+
+const COMMUNICATION_CHANNELS = {
+  email: { name: 'Email', icon: 'email' },
+  sms: { name: 'SMS', icon: 'message-text' },
+  in_app: { name: 'In-App', icon: 'cellphone' },
+  push: { name: 'Push', icon: 'bell' },
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fa',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '600',
     color: '#333',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  refreshButton: {
-    padding: 8,
-    marginRight: 8,
   },
   createButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: '#007bff',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 6,
+    gap: 8,
   },
   createButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 4,
+    fontWeight: '500',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#fff',
     margin: 16,
+    marginBottom: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#f5f5f5',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
   searchIcon: {
     marginRight: 8,
@@ -330,181 +429,174 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#333',
+    paddingVertical: 8,
   },
   clearButton: {
     padding: 4,
   },
-  filtersContainer: {
+  filterChips: {
     paddingHorizontal: 16,
     marginBottom: 8,
   },
-  categoryFilter: {
-    marginBottom: 12,
-  },
-  categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    marginRight: 8,
-  },
-  categoryChipSelected: {
-    backgroundColor: '#007AFF',
-  },
-  categoryChipText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  categoryChipTextSelected: {
-    color: '#fff',
-  },
   filterChip: {
-    alignSelf: 'flex-start',
+    backgroundColor: '#f0f0f0',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    marginRight: 8,
   },
   filterChipSelected: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#007bff',
   },
   filterChipText: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#666',
   },
   filterChipTextSelected: {
     color: '#fff',
   },
-  summaryContainer: {
+  channelFilter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     paddingHorizontal: 16,
     marginBottom: 8,
+    gap: 8,
   },
-  summaryText: {
+  channelFilterButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  channelFilterButtonSelected: {
+    backgroundColor: '#007bff',
+  },
+  sortOptions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    gap: 8,
+  },
+  sortLabel: {
     fontSize: 14,
     color: '#666',
   },
+  sortButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+  },
+  sortButtonSelected: {
+    backgroundColor: '#007bff',
+  },
+  sortButtonText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  sortButtonTextSelected: {
+    color: '#fff',
+  },
+  resultsCount: {
+    fontSize: 14,
+    color: '#666',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
   templateGrid: {
-    padding: 16,
+    padding: 8,
   },
   templateCard: {
-    flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    margin: 4,
+    borderRadius: 8,
+    padding: 12,
+    margin: 8,
+    width: (screenWidth - 48) / 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
   },
-  templateHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  cardHeader: {
     marginBottom: 8,
   },
-  categoryBadge: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  categoryText: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  editButton: {
-    padding: 4,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 6,
   },
   templateName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
+    flex: 1,
   },
-  templateSubject: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-    fontStyle: 'italic',
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 4,
   },
-  templateContent: {
-    fontSize: 14,
+  actionButton: {
+    padding: 4,
+  },
+  templateDescription: {
+    fontSize: 12,
     color: '#666',
-    lineHeight: 20,
     marginBottom: 8,
+    lineHeight: 16,
   },
-  templateFooter: {
+  cardFooter: {
+    gap: 4,
+  },
+  tagsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  variableCount: {
-    fontSize: 12,
-    color: '#666',
-  },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#f0f0f0',
-  },
-  activeBadge: {
-    backgroundColor: '#4CAF50',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
   statusText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  activeText: {
+    fontSize: 10,
     color: '#fff',
+    fontWeight: '500',
+    textTransform: 'uppercase',
+  },
+  categoryText: {
+    fontSize: 10,
+    color: '#666',
+    fontWeight: '500',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statText: {
+    fontSize: 10,
+    color: '#666',
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: 32,
   },
   emptyStateText: {
     fontSize: 18,
     color: '#666',
     marginTop: 16,
-    textAlign: 'center',
+    marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
     color: '#999',
-    marginTop: 8,
     textAlign: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#ff4444',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
 
