@@ -40,15 +40,27 @@ const workflowAnalyticsRoutes = require('./routes/workflowAnalytics');
 const experimentsRoutes = require('./routes/experiments');
 const revenueRoutes = require('./routes/revenue');
 const commissionRoutes = require('./routes/commissions');
+const mlsRoutes = require('./routes/mls');
+const mlsSyncRoutes = require('./routes/mls-sync');
+const conversionTrackingRoutes = require('./routes/conversion-tracking');
+const analyticsDashboardRoutes = require('./routes/analytics-dashboard');
+const notificationsManagementRoutes = require('./routes/notifications-management');
+const marketInsightsRoutes = require('./routes/market-insights');
+const leadScoreRoutes = require('./routes/lead-score');
+const mlsSyncSchedulerRoutes = require('./routes/mls-sync-scheduler');
+const notificationTriggersRoutes = require('./routes/notification-triggers');
 
 // Import job queues
 const { setupJobQueues, addWorkflowProcessingJob } = require('./jobs/setup');
 const migrationManager = require('./migrations');
+const cronScheduler = require('./jobs/cronScheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Security middleware
+const cronScheduler = require('./jobs/cronScheduler');
+const NotificationScheduler = require('./services/NotificationScheduler');
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -163,10 +175,31 @@ app.use('/api/conversion', conversionRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/migrations', migrationRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/leads', leadRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/interactions', interactionRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/templates', templateRoutes);
+app.use('/api/conversion', conversionRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/profile', profileRoutes);
+app.use('/api/migrations', migrationRoutes);
 app.use('/api/workflow-analytics', workflowAnalyticsRoutes);
 app.use('/api/experiments', experimentsRoutes);
 app.use('/api/revenue', revenueRoutes);
 app.use('/api/commissions', commissionRoutes);
+app.use('/api/mls', mlsRoutes);
+app.use('/api/mls-sync', mlsSyncRoutes);
+app.use('/api/conversion-tracking', conversionTrackingRoutes);
+app.use('/api/analytics-dashboard', analyticsDashboardRoutes);
+app.use('/api/notifications-management', notificationsManagementRoutes);
+app.use('/api/market-insights', marketInsightsRoutes);
+app.use('/api/lead-score', leadScoreRoutes);
+app.use('/api/mls-sync', mlsSyncSchedulerRoutes);
+app.use('/api/notifications', notificationTriggersRoutes);
 
 // Remove duplicate webhook routes - use API endpoints only
 // Frontend should connect to /api/* endpoints, not webhook routes
@@ -229,10 +262,33 @@ async function startServer() {
     logger.info('Workflow scheduler started (runs every 5 minutes)');
 
     // Start the server
-    serverInstance = app.listen(PORT, () => {
+    serverInstance = app.listen(PORT, async () => {
       logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
       logger.info(`API Documentation available at http://localhost:${PORT}/api-docs`);
       logger.info(`Metrics available at http://localhost:${PORT}/metrics`);
+
+      // Start cron scheduler
+      try {
+        await cronScheduler.start();
+        logger.info('Cron scheduler started successfully');
+      } catch (error) {
+      // Start cron scheduler
+      try {
+        await cronScheduler.start();
+        logger.info('Cron scheduler started successfully');
+      } catch (error) {
+        logger.error('Failed to start cron scheduler', { error: error.message });
+      }
+
+      // Start notification scheduler
+      try {
+        NotificationScheduler.start();
+        logger.info('Notification scheduler started successfully');
+      } catch (error) {
+        logger.error('Failed to start notification scheduler', { error: error.message });
+      }
+        logger.error('Failed to start cron scheduler', { error: error.message });
+      }
     });
 
     // Handle server errors
@@ -266,6 +322,21 @@ const gracefulShutdown = async (signal = 'unknown') => {
           } else {
             logger.info('Server stopped accepting connections');
           }
+    // Stop cron scheduler
+    try {
+      cronScheduler.stop();
+      logger.info('Cron scheduler stopped');
+    } catch (error) {
+      logger.error('Error stopping cron scheduler:', error);
+    }
+
+    // Stop notification scheduler
+    try {
+      NotificationScheduler.stop();
+      logger.info('Notification scheduler stopped');
+    } catch (error) {
+      logger.error('Error stopping notification scheduler:', error);
+    }
           resolve();
         });
       });
@@ -276,6 +347,14 @@ const gracefulShutdown = async (signal = 'unknown') => {
       clearInterval(workflowInterval);
       workflowInterval = null;
       logger.info('Workflow scheduler stopped');
+    }
+
+    // Stop cron scheduler
+    try {
+      cronScheduler.stop();
+      logger.info('Cron scheduler stopped');
+    } catch (error) {
+      logger.error('Error stopping cron scheduler:', error);
     }
 
     // Close database connections
