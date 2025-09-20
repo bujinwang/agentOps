@@ -1,0 +1,143 @@
+# Docker Compose for Testing Environment
+# Isolated testing environment with test database and services
+
+version: '3.8'
+
+services:
+  # Test Database
+  postgres:
+    image: postgres:13-alpine
+    container_name: real-estate-crm-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: real_estate_crm_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/test-data.sql:/docker-entrypoint-initdb.d/02-test-data.sql:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d real_estate_crm_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5433:5432"  # Expose for local testing
+
+  # Test Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: real-estate-crm-redis-test
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_test_data:/data
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "6380:6379"  # Expose for local testing
+
+  # Test Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: test
+    container_name: real-estate-crm-backend-test
+    restart: unless-stopped
+    environment:
+      NODE_ENV: test
+      PORT: 3001
+      DATABASE_URL: postgresql://test_user:test_password@postgres:5432/real_estate_crm_test
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: test_jwt_secret_for_testing_only_not_for_production
+      OPENAI_API_KEY: test_openai_key
+      CORS_ORIGIN: http://localhost:3000
+      LOG_LEVEL: debug
+      CACHE_ENABLED: true
+      MONITORING_ENABLED: false
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/test-results:/app/test-results
+      - ./backend/coverage:/app/coverage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - test-network
+    ports:
+      - "3001:3001"  # Expose for local testing
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Performance Testing Service
+  k6:
+    image: grafana/k6:latest
+    container_name: real-estate-crm-k6-test
+    volumes:
+      - ./tests/performance:/scripts
+    networks:
+      - test-network
+    depends_on:
+      - backend
+    profiles:
+      - performance
+
+  # Load Testing with Artillery
+  artillery:
+    image: artilleryio/artillery:latest
+    container_name: real-estate-crm-artillery-test
+    volumes:
+      - ./tests/load:/config
+    networks:
+      - test-network
+    depends_on:
+      - backend
+    profiles:
+      - load
+
+  # E2E Testing with Playwright
+  playwright:
+    build:
+      context: ./tests/e2e
+      dockerfile: Dockerfile
+    container_name: real-estate-crm-playwright-test
+    volumes:
+      - ./tests/e2e:/tests
+      - ./tests/e2e/test-results:/tests/test-results
+    networks:
+      - test-network
+    depends_on:
+      - backend
+    profiles:
+      - e2e
+
+volumes:
+  postgres_test_data:
+    driver: local
+  redis_test_data:
+    driver: local
+
+networks:
+  test-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
