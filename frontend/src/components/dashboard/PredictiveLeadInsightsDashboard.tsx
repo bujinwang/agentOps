@@ -16,20 +16,20 @@ import { useFocusEffect } from '@react-navigation/native';
 import { MaterialColors, MaterialTypography } from '../../styles/MaterialDesign';
 
 // Components
-// import DashboardHeader from './components/DashboardHeader';
-// import LeadInsightsPanel from './components/LeadInsightsPanel';
-// import ConversionProbabilityChart from './components/ConversionProbabilityChart';
-// import PredictiveTimeline from './components/PredictiveTimeline';
-// import BehavioralAnalysis from './components/BehavioralAnalysis';
-// import RecommendationEngine from './components/RecommendationEngine';
-// import ModelPerformanceMonitor from './components/ModelPerformanceMonitor';
-// import AlertCenter from './components/AlertCenter';
-// import DashboardFilters from './components/DashboardFilters';
+import DashboardHeader from './components/DashboardHeader';
+import LeadInsightsPanel from './components/LeadInsightsPanel';
+import ConversionProbabilityChart from './components/ConversionProbabilityChart';
+import PredictiveTimeline from './components/PredictiveTimeline';
+import BehavioralAnalysis from './components/BehavioralAnalysis';
+import RecommendationEngine from './components/RecommendationEngine';
+import ModelPerformanceMonitor from './components/ModelPerformanceMonitor';
+import AlertCenter from './components/AlertCenter';
+import DashboardFilters from './components/DashboardFilters';
 import LeadScoringTrendChart from './components/LeadScoringTrendChart';
 import InteractiveLeadComparisonMatrix from './components/InteractiveLeadComparisonMatrix';
 import PerformanceMetricsWidget from './components/PerformanceMetricsWidget';
-// import LoadingOverlay from '../common/LoadingOverlay';
-// import ErrorBoundary from '../common/ErrorBoundary';
+import LoadingOverlay from '../common/LoadingOverlay';
+import ErrorBoundary from '../common/ErrorBoundary';
 
 // Services and Types
 import { dashboardService } from '../../services/dashboardService';
@@ -356,6 +356,23 @@ const PredictiveLeadInsightsDashboard: React.FC<PredictiveLeadInsightsDashboardP
         }
         showsVerticalScrollIndicator={false}
       >
+        {/* Dashboard Header */}
+        <DashboardHeader
+          title="Predictive Lead Insights"
+          subtitle={`${leadInsights.length} leads analyzed`}
+          onRefresh={handleRefresh}
+          onExport={handleExport}
+          refreshing={refreshing}
+        />
+
+        {/* Dashboard Filters */}
+        <View style={styles.section}>
+          <DashboardFilters
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+          />
+        </View>
+
         {/* Performance Metrics Widget */}
         <View style={styles.section}>
           <PerformanceMetricsWidget
@@ -363,8 +380,79 @@ const PredictiveLeadInsightsDashboard: React.FC<PredictiveLeadInsightsDashboardP
             timeRange="week"
             onTimeRangeChange={(range) => console.log('Time range changed:', range)}
             onMetricPress={(type, value) => console.log('Metric pressed:', type, value)}
-            loading={false}
+            loading={componentLoadingStates.get('dashboard-metrics')?.loading || false}
           />
+        </View>
+
+        {/* Lead Insights Panel */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Lead Insights</Text>
+          <LeadInsightsPanel
+            insights={leadInsights}
+            onLeadPress={(leadId) => navigation?.navigate('LeadDetail', { leadId })}
+            loading={componentLoadingStates.get('lead-insights')?.loading || false}
+            maxItems={5}
+            autoRefresh={true}
+            refreshInterval={30}
+          />
+        </View>
+
+        {/* Conversion Probability Chart */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Conversion Probability</Text>
+          <ConversionProbabilityChart
+            data={conversionData}
+            loading={componentLoadingStates.get('conversion-probability')?.loading || false}
+          />
+        </View>
+
+        {/* Predictive Timeline */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Predictive Timeline</Text>
+          <PredictiveTimeline
+            analytics={predictiveAnalytics}
+            loading={componentLoadingStates.get('predictive-timeline')?.loading || false}
+          />
+        </View>
+
+        {/* Behavioral Analysis */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Behavioral Analysis</Text>
+          {topInsights.length > 0 ? (
+            <BehavioralAnalysis
+              leadId={topInsights[0].leadId}
+              loading={componentLoadingStates.get('behavioral-analysis')?.loading || false}
+              compact={true}
+            />
+          ) : (
+            <View style={styles.placeholder}>
+              <Text style={styles.placeholderText}>No leads available for behavioral analysis</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Recommendation Engine */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>AI Recommendations</Text>
+          {topInsights.length > 0 ? (
+            <RecommendationEngine
+              lead={topInsights[0]}
+              predictiveAnalytics={predictiveAnalytics.find(pa => pa.leadId === topInsights[0].leadId) || predictiveAnalytics[0]}
+              onActionTaken={(action, recommendationId) => {
+                console.log('Recommendation action taken:', action, recommendationId);
+                // Handle recommendation action tracking
+              }}
+              onRecommendationDismissed={(recommendationId) => {
+                console.log('Recommendation dismissed:', recommendationId);
+                // Handle recommendation dismissal
+              }}
+              maxRecommendations={3}
+            />
+          ) : (
+            <View style={styles.placeholder}>
+              <Text style={styles.placeholderText}>No leads available for AI recommendations</Text>
+            </View>
+          )}
         </View>
 
         {/* Lead Scoring Trend Chart */}
@@ -374,7 +462,7 @@ const PredictiveLeadInsightsDashboard: React.FC<PredictiveLeadInsightsDashboardP
             leads={leadInsights}
             timeRange="30d"
             height={300}
-            loading={false}
+            loading={componentLoadingStates.get('lead-scoring-trend')?.loading || false}
             onLeadSelect={(leadIds) => console.log('Leads selected:', leadIds)}
             onTimeRangeChange={(range) => console.log('Time range changed:', range)}
           />
@@ -390,7 +478,25 @@ const PredictiveLeadInsightsDashboard: React.FC<PredictiveLeadInsightsDashboardP
             maxLeads={4}
             onLeadSelect={(leadIds) => console.log('Leads selected:', leadIds)}
             onLeadPress={(leadId) => navigation?.navigate('LeadDetail', { leadId })}
-            loading={false}
+            loading={componentLoadingStates.get('lead-comparison')?.loading || false}
+          />
+        </View>
+
+        {/* Model Performance Monitor */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Model Performance</Text>
+          <ModelPerformanceMonitor
+            metrics={dashboardMetrics}
+            loading={componentLoadingStates.get('model-performance')?.loading || false}
+          />
+        </View>
+
+        {/* Alert Center */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Alerts & Notifications</Text>
+          <AlertCenter
+            alerts={alerts}
+            onAlertAction={handleAlertAction}
           />
         </View>
 
@@ -451,6 +557,22 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 20,
+  },
+  placeholder: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    borderStyle: 'dashed',
+  },
+  placeholderText: {
+    color: '#6c757d',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
 

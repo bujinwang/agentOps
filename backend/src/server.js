@@ -16,10 +16,7 @@ const { logger } = require('./config/logger');
 const { initializeMetrics, metricsMiddleware, metricsEndpoint } = require('./config/metrics');
 const {
   requestMonitor,
-  healthCheck,
-  detailedHealthCheck,
-  performanceMonitor,
-  memoryMonitor
+  performanceMonitor: legacyPerformanceMonitor
 } = require('./middleware/monitoring');
 const { errorHandler } = require('./middleware/errorHandler');
 const { securityHeaders } = require('./middleware/securityHeaders');
@@ -34,7 +31,7 @@ const {
 } = require('./middleware/rateLimiter');
 const {
   responseTimeMonitor,
-  memoryMonitor,
+  memoryMonitor: resourceMemoryMonitor,
   cpuMonitor,
   throughputMonitor,
   performanceMetricsEndpoint,
@@ -76,6 +73,9 @@ const leadScoreRoutes = require('./routes/lead-score');
 const mlsSyncSchedulerRoutes = require('./routes/mls-sync-scheduler');
 const notificationTriggersRoutes = require('./routes/notification-triggers');
 
+const app = express();
+const PORT = process.env.PORT || 3000;
+
 // Apply caching to frequently accessed routes
 app.use('/api/leads', cacheMiddleware({
   ttl: 300, // 5 minutes
@@ -100,9 +100,6 @@ const { setupJobQueues, addWorkflowProcessingJob } = require('./jobs/setup');
 const migrationManager = require('./migrations');
 const cronScheduler = require('./jobs/cronScheduler');
 const NotificationScheduler = require('./services/NotificationScheduler');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
 
 // Enhanced Security Middleware Stack
 

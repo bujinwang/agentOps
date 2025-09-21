@@ -448,8 +448,12 @@ const cleanupExpiredTokens = () => {
 // Start periodic cleanup
 setInterval(cleanupExpiredTokens, 60 * 60 * 1000); // Every hour
 
+// Backwards compatibility export for existing route imports
+const authenticateToken = authenticate;
+
 module.exports = {
   authenticate,
+  authenticateToken,
   optionalAuth,
   refreshToken,
   generateTokens,

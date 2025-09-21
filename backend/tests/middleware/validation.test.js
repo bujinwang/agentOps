@@ -1,30 +1,20 @@
+const realExpressValidator = jest.requireActual('express-validator');
+const defaultValidationResultImpl = (...args) => realExpressValidator.validationResult(...args);
+const validationResultMock = jest.fn(defaultValidationResultImpl);
+
+jest.mock('express-validator', () => ({
+  ...realExpressValidator,
+  validationResult: validationResultMock
+}));
+
+const { validationResult } = require('express-validator');
 const { validateRegister, validateLogin, validateLeadCreation, handleValidationErrors } = require('../../src/middleware/validation');
 const { ValidationError } = require('../../src/middleware/errorHandler');
-const { body, validationResult } = require('express-validator');
 
-// Mock express-validator
-jest.mock('express-validator', () => ({
-  body: jest.fn(() => ({
-    isEmail: jest.fn().mockReturnThis(),
-    normalizeEmail: jest.fn().mockReturnThis(),
-    isLength: jest.fn().mockReturnThis(),
-    matches: jest.fn().mockReturnThis(),
-    withMessage: jest.fn().mockReturnThis(),
-    trim: jest.fn().mockReturnThis(),
-    notEmpty: jest.fn().mockReturnThis(),
-    isAlphanumeric: jest.fn().mockReturnThis(),
-    isIn: jest.fn().mockReturnThis(),
-    isFloat: jest.fn().mockReturnThis(),
-    toFloat: jest.fn().mockReturnThis(),
-    isInt: jest.fn().mockReturnThis(),
-    toInt: jest.fn().mockReturnThis(),
-    isMobilePhone: jest.fn().mockReturnThis(),
-    isISO8601: jest.fn().mockReturnThis(),
-    optional: jest.fn().mockReturnThis(),
-    run: jest.fn().mockResolvedValue({})
-  })),
-  validationResult: jest.fn()
-}));
+beforeEach(() => {
+  validationResult.mockImplementation(defaultValidationResultImpl);
+  validationResult.mockClear();
+});
 
 describe('Validation Middleware', () => {
   describe('Auth Validation', () => {

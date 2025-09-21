@@ -5,7 +5,7 @@
 
 const jwt = require('jsonwebtoken');
 const { generateTokens, verifyToken, authenticate } = require('../../src/middleware/auth');
-const { User } = require('../../src/models/User');
+const User = require('../../src/models/User');
 const { JWT_CONFIG } = require('../../src/config/constants');
 
 // Mock User model
@@ -41,6 +41,9 @@ describe('Authentication Middleware', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    if (User && User.findById) {
+      User.findById.mockReset();
+    }
     // Mock process.env
     process.env.JWT_SECRET = mockSecret;
   });
@@ -115,6 +118,7 @@ describe('Authentication Middleware', () => {
           userId: mockUser.user_id,
           email: mockUser.email,
           type: 'access',
+          iss: 'real-estate-crm-api',
           iat: Math.floor(Date.now() / 1000) - 3600, // 1 hour ago
           exp: Math.floor(Date.now() / 1000) - 1800, // 30 minutes ago
         },
@@ -145,6 +149,7 @@ describe('Authentication Middleware', () => {
           userId: mockUser.user_id,
           email: mockUser.email,
           type: 'access',
+          iss: 'real-estate-crm-api',
           iat: Math.floor(Date.now() / 1000) + 3600, // 1 hour in future
         },
         mockSecret,
@@ -158,7 +163,7 @@ describe('Authentication Middleware', () => {
 
     test('should reject token missing required claims', () => {
       const incompleteToken = jwt.sign(
-        { email: 'test@example.com' }, // Missing userId
+        { email: 'test@example.com', iss: 'real-estate-crm-api' }, // Missing userId
         mockSecret,
         { algorithm: 'HS256' }
       );
@@ -179,6 +184,9 @@ describe('Authentication Middleware', () => {
         headers: {},
         userId: null,
         user: null,
+        ip: '127.0.0.1',
+        connection: { remoteAddress: '127.0.0.1' },
+        get: jest.fn(() => 'jest-test-agent')
       };
       mockRes = {
         status: jest.fn().mockReturnThis(),
@@ -218,7 +226,8 @@ describe('Authentication Middleware', () => {
       expect(mockRes.status).toHaveBeenCalledWith(401);
       expect(mockRes.json).toHaveBeenCalledWith({
         error: 'Invalid token',
-        message: 'Invalid or expired token'
+        message: 'Invalid or expired token',
+        code: 'INVALID_TOKEN'
       });
     });
 
@@ -234,7 +243,8 @@ describe('Authentication Middleware', () => {
       expect(mockRes.status).toHaveBeenCalledWith(401);
       expect(mockRes.json).toHaveBeenCalledWith({
         error: 'User not found',
-        message: 'User not found'
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
       });
     });
 
@@ -267,7 +277,8 @@ describe('Authentication Middleware', () => {
       expect(mockRes.status).toHaveBeenCalledWith(500);
       expect(mockRes.json).toHaveBeenCalledWith({
         error: 'Authentication failed',
-        message: 'Internal server error'
+        message: 'Internal server error',
+        code: 'AUTHENTICATION_ERROR'
       });
 
       // Restore original function
