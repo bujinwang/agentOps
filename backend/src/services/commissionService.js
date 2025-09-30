@@ -593,6 +593,446 @@ class CommissionService {
         const result = await pool.query(query, [commissionId]);
         return result.rows;
     }
+
+    async getCommissionRecords({
+        page = 1,
+        limit = 50,
+        startDate,
+        endDate,
+        agentId,
+        status,
+        userRole,
+        requestingUserId
+    }) {
+        const offset = (page - 1) * limit;
+        const filters = [];
+        const params = [];
+
+        if (status) {
+            params.push(status);
+            filters.push(`ac.payment_status = $${params.length}`);
+        }
+
+        if (startDate) {
+            params.push(startDate);
+            filters.push(`ac.created_at >= $${params.length}`);
+        }
+
+        if (endDate) {
+            params.push(endDate);
+            filters.push(`ac.created_at <= $${params.length}`);
+        }
+
+        if (agentId) {
+            params.push(agentId);
+            filters.push(`ac.agent_id = $${params.length}`);
+        } else if (!['admin', 'manager'].includes((userRole || '').toLowerCase())) {
+            params.push(requestingUserId);
+            filters.push(`ac.agent_id = $${params.length}`);
+        }
+
+        const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+        const countQuery = `
+            SELECT COUNT(*) AS total
+            FROM agent_commissions ac
+            ${whereClause}
+        `;
+
+        const totalResult = await pool.query(countQuery, params);
+        const total = parseInt(totalResult.rows[0]?.total || 0, 10);
+
+        const dataQuery = `
+            SELECT
+                ac.id,
+                ac.transaction_id,
+                ac.agent_id,
+                ac.commission_structure_id,
+                ac.gross_amount,
+                ac.commission_rate,
+                ac.commission_amount,
+                ac.adjustments,
+                ac.bonuses,
+                ac.penalties,
+                ac.taxes,
+                ac.net_amount,
+                ac.paid_amount,
+                ac.outstanding_amount,
+                ac.payment_status,
+                ac.payment_date,
+                ac.payment_reference,
+                ac.created_at,
+                ac.updated_at,
+                rt.amount AS transaction_amount,
+                rt.transaction_date,
+                rt.transaction_type,
+                u.first_name,
+                u.last_name,
+                u.email
+            FROM agent_commissions ac
+            LEFT JOIN revenue_transactions rt ON ac.transaction_id = rt.id
+            LEFT JOIN users u ON ac.agent_id = COALESCE(u.id, u.user_id)
+            ${whereClause}
+            ORDER BY ac.created_at DESC
+            LIMIT $${params.length + 1}
+            OFFSET $${params.length + 2}
+        `;
+
+        const dataResult = await pool.query(dataQuery, [...params, limit, offset]);
+
+        const records = dataResult.rows.map((row) => ({
+            id: row.id,
+            transactionId: row.transaction_id,
+            agentId: row.agent_id,
+            commissionStructureId: row.commission_structure_id,
+            grossAmount: Number(row.gross_amount),
+            commissionRate: row.commission_rate ? Number(row.commission_rate) : null,
+            commissionAmount: Number(row.commission_amount),
+            adjustments: Number(row.adjustments || 0),
+            bonuses: Number(row.bonuses || 0),
+            penalties: Number(row.penalties || 0),
+            taxes: Number(row.taxes || 0),
+            netAmount: Number(row.net_amount),
+            paidAmount: Number(row.paid_amount || 0),
+            outstandingAmount: Number(row.outstanding_amount || 0),
+            paymentStatus: row.payment_status,
+            paymentDate: row.payment_date,
+            paymentReference: row.payment_reference,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            transaction: row.transaction_id ? {
+                id: row.transaction_id,
+                amount: row.transaction_amount ? Number(row.transaction_amount) : null,
+                date: row.transaction_date,
+                type: row.transaction_type
+            } : null,
+            agent: {
+                id: row.agent_id,
+                name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
+                email: row.email || null
+            }
+        }));
+
+        return {
+            data: records,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: total > 0 ? Math.ceil(total / limit) : 0
+            }
+        };
+    }
+
+    async getCommissionById(commissionId, { userRole, requestingUserId }) {
+        const params = [commissionId];
+        let accessClause = '';
+
+        if (!['admin', 'manager'].includes((userRole || '').toLowerCase())) {
+            params.push(requestingUserId);
+            accessClause = ' AND ac.agent_id = $2';
+        }
+
+        const query = `
+            SELECT
+                ac.*,
+                rt.amount AS transaction_amount,
+                rt.transaction_date,
+                rt.transaction_type,
+                u.first_name,
+                u.last_name,
+                u.email,
+                cp.id AS payment_id,
+                cp.payment_date,
+                cp.total_amount,
+                cp.status AS payment_status,
+                cpd.amount_paid
+            FROM agent_commissions ac
+            LEFT JOIN revenue_transactions rt ON ac.transaction_id = rt.id
+            LEFT JOIN users u ON ac.agent_id = COALESCE(u.id, u.user_id)
+            LEFT JOIN commission_payment_details cpd ON ac.id = cpd.commission_id
+            LEFT JOIN commission_payments cp ON cpd.payment_id = cp.id
+            WHERE ac.id = $1${accessClause}
+        `;
+
+        const result = await pool.query(query, params);
+
+        if (result.rows.length === 0) {
+            return null;
+        }
+
+        const base = result.rows[0];
+        const payments = result.rows
+            .filter(row => row.payment_id)
+            .map(row => ({
+                id: row.payment_id,
+                paymentDate: row.payment_date,
+                amountPaid: Number(row.amount_paid || 0),
+                totalAmount: Number(row.total_amount || 0),
+                status: row.payment_status
+            }));
+
+        return {
+            id: base.id,
+            transactionId: base.transaction_id,
+            agentId: base.agent_id,
+            commissionStructureId: base.commission_structure_id,
+            grossAmount: Number(base.gross_amount),
+            commissionRate: base.commission_rate ? Number(base.commission_rate) : null,
+            commissionAmount: Number(base.commission_amount),
+            adjustments: Number(base.adjustments || 0),
+            bonuses: Number(base.bonuses || 0),
+            penalties: Number(base.penalties || 0),
+            taxes: Number(base.taxes || 0),
+            netAmount: Number(base.net_amount),
+            paidAmount: Number(base.paid_amount || 0),
+            outstandingAmount: Number(base.outstanding_amount || 0),
+            paymentStatus: base.payment_status,
+            paymentDate: base.payment_date,
+            paymentReference: base.payment_reference,
+            createdAt: base.created_at,
+            updatedAt: base.updated_at,
+            transaction: base.transaction_id ? {
+                id: base.transaction_id,
+                amount: base.transaction_amount ? Number(base.transaction_amount) : null,
+                date: base.transaction_date,
+                type: base.transaction_type
+            } : null,
+            agent: {
+                id: base.agent_id,
+                name: [base.first_name, base.last_name].filter(Boolean).join(' ').trim(),
+                email: base.email || null
+            },
+            payments
+        };
+    }
+
+    async getCommissionPayments({
+        page = 1,
+        limit = 50,
+        agentId,
+        status,
+        userRole,
+        requestingUserId
+    }) {
+        const offset = (page - 1) * limit;
+        const filters = [];
+        const params = [];
+
+        if (status) {
+            params.push(status);
+            filters.push(`cp.status = $${params.length}`);
+        }
+
+        if (agentId) {
+            params.push(agentId);
+            filters.push(`cp.agent_id = $${params.length}`);
+        } else if (!['admin', 'manager'].includes((userRole || '').toLowerCase())) {
+            params.push(requestingUserId);
+            filters.push(`cp.agent_id = $${params.length}`);
+        }
+
+        const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+        const countQuery = `
+            SELECT COUNT(*) AS total
+            FROM commission_payments cp
+            ${whereClause}
+        `;
+
+        const totalResult = await pool.query(countQuery, params);
+        const total = parseInt(totalResult.rows[0]?.total || 0, 10);
+
+        const dataQuery = `
+            SELECT
+                cp.id,
+                cp.agent_id,
+                cp.payment_date,
+                cp.payment_period_start,
+                cp.payment_period_end,
+                cp.total_amount,
+                cp.payment_method,
+                cp.reference_number,
+                cp.status,
+                cp.processed_by,
+                cp.created_at,
+                cp.updated_at,
+                u.first_name,
+                u.last_name,
+                COUNT(cpd.commission_id) AS commission_count,
+                COALESCE(SUM(cpd.amount_paid), 0) AS amount_paid
+            FROM commission_payments cp
+            LEFT JOIN commission_payment_details cpd ON cp.id = cpd.payment_id
+            LEFT JOIN users u ON cp.agent_id = COALESCE(u.id, u.user_id)
+            ${whereClause}
+            GROUP BY cp.id, u.first_name, u.last_name
+            ORDER BY cp.payment_date DESC
+            LIMIT $${params.length + 1}
+            OFFSET $${params.length + 2}
+        `;
+
+        const dataResult = await pool.query(dataQuery, [...params, limit, offset]);
+
+        const payments = dataResult.rows.map(row => ({
+            id: row.id,
+            agentId: row.agent_id,
+            paymentDate: row.payment_date,
+            period: {
+                start: row.payment_period_start,
+                end: row.payment_period_end
+            },
+            totalAmount: Number(row.total_amount),
+            amountPaid: Number(row.amount_paid),
+            paymentMethod: row.payment_method,
+            referenceNumber: row.reference_number,
+            status: row.status,
+            processedBy: row.processed_by,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            commissionCount: parseInt(row.commission_count, 10) || 0,
+            agent: {
+                id: row.agent_id,
+                name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
+            }
+        }));
+
+        return {
+            data: payments,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: total > 0 ? Math.ceil(total / limit) : 0
+            }
+        };
+    }
+
+    async getCommissionDisputes({ page = 1, limit = 50, status = 'open', userRole, requestingUserId }) {
+        const offset = (page - 1) * limit;
+        const filters = [];
+        const params = [];
+
+        if (status) {
+            params.push(status);
+            filters.push(`cd.status = $${params.length}`);
+        }
+
+        if (!['admin', 'manager'].includes((userRole || '').toLowerCase())) {
+            params.push(requestingUserId);
+            filters.push(`cd.raised_by = $${params.length}`);
+        }
+
+        const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+        const countQuery = `
+            SELECT COUNT(*) AS total
+            FROM commission_disputes cd
+            ${whereClause}
+        `;
+
+        const totalResult = await pool.query(countQuery, params);
+        const total = parseInt(totalResult.rows[0]?.total || 0, 10);
+
+        const dataQuery = `
+            SELECT
+                cd.id,
+                cd.commission_id,
+                cd.raised_by,
+                cd.reason,
+                cd.description,
+                cd.status,
+                cd.created_at,
+                cd.updated_at,
+                cd.resolution,
+                cd.resolved_by,
+                cd.resolved_at,
+                ac.agent_id,
+                ac.payment_status
+            FROM commission_disputes cd
+            LEFT JOIN agent_commissions ac ON cd.commission_id = ac.id
+            ${whereClause}
+            ORDER BY cd.created_at DESC
+            LIMIT $${params.length + 1}
+            OFFSET $${params.length + 2}
+        `;
+
+        const dataResult = await pool.query(dataQuery, [...params, limit, offset]);
+
+        return {
+            data: dataResult.rows,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: total > 0 ? Math.ceil(total / limit) : 0
+            }
+        };
+    }
+
+    async exportCommissions({ startDate, endDate, agentId, userRole, requestingUserId }) {
+        const records = await this.getCommissionRecords({
+            page: 1,
+            limit: 10000,
+            startDate,
+            endDate,
+            agentId,
+            userRole,
+            requestingUserId
+        });
+
+        return records.data;
+    }
+
+    async exportCommissionPayments({ startDate, endDate, agentId, userRole, requestingUserId }) {
+        const filters = [];
+        const params = [];
+
+        if (startDate) {
+            params.push(startDate);
+            filters.push(`cp.payment_date >= $${params.length}`);
+        }
+
+        if (endDate) {
+            params.push(endDate);
+            filters.push(`cp.payment_date <= $${params.length}`);
+        }
+
+        if (agentId) {
+            params.push(agentId);
+            filters.push(`cp.agent_id = $${params.length}`);
+        } else if (!['admin', 'manager'].includes((userRole || '').toLowerCase())) {
+            params.push(requestingUserId);
+            filters.push(`cp.agent_id = $${params.length}`);
+        }
+
+        const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+        const query = `
+            SELECT
+                cp.id,
+                cp.agent_id,
+                cp.payment_date,
+                cp.payment_period_start,
+                cp.payment_period_end,
+                cp.total_amount,
+                cp.payment_method,
+                cp.reference_number,
+                cp.status,
+                cp.processed_by,
+                cp.created_at,
+                cp.updated_at,
+                COUNT(cpd.commission_id) AS commission_count,
+                COALESCE(SUM(cpd.amount_paid), 0) AS amount_paid
+            FROM commission_payments cp
+            LEFT JOIN commission_payment_details cpd ON cp.id = cpd.payment_id
+            ${whereClause}
+            GROUP BY cp.id
+            ORDER BY cp.payment_date DESC
+        `;
+
+        const result = await pool.query(query, params);
+        return result.rows;
+    }
 }
 
 module.exports = new CommissionService();

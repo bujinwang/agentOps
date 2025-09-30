@@ -7,6 +7,14 @@ const rateLimit = require('express-rate-limit');
 const RedisStore = require('rate-limit-redis');
 const { logger } = require('../config/logger');
 
+const sanitizeOptionsForTests = (options = {}) => {
+  if (process.env.NODE_ENV === 'test') {
+    const { onLimitReached, ...rest } = options;
+    return rest;
+  }
+  return options;
+};
+
 // Redis store for distributed rate limiting
 const getRedisStore = () => {
   try {
@@ -23,7 +31,7 @@ const getRedisStore = () => {
 };
 
 // General API rate limiter
-const createGeneralLimiter = () => rateLimit({
+const createGeneralLimiter = () => rateLimit(sanitizeOptionsForTests({
   store: getRedisStore(),
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
@@ -45,11 +53,11 @@ const createGeneralLimiter = () => rateLimit({
       method: req.method,
       userAgent: req.get('User-Agent')
     });
-  }
-});
+}
+}));
 
 // Strict rate limiter for authentication endpoints
-const createAuthLimiter = () => rateLimit({
+const createAuthLimiter = () => rateLimit(sanitizeOptionsForTests({
   store: getRedisStore(),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Only 5 attempts per 15 minutes
@@ -68,11 +76,11 @@ const createAuthLimiter = () => rateLimit({
       method: req.method,
       email: req.body?.email || 'unknown'
     });
-  }
-});
+}
+}));
 
 // API endpoints rate limiter (more permissive)
-const createApiLimiter = () => rateLimit({
+const createApiLimiter = () => rateLimit(sanitizeOptionsForTests({
   store: getRedisStore(),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200, // Higher limit for API endpoints
@@ -88,10 +96,10 @@ const createApiLimiter = () => rateLimit({
     return req.path === '/health' || req.path === '/health/detailed' ||
            req.path === '/metrics' || req.path.startsWith('/api-docs');
   }
-});
+}));
 
 // File upload rate limiter (stricter)
-const createUploadLimiter = () => rateLimit({
+const createUploadLimiter = () => rateLimit(sanitizeOptionsForTests({
   store: getRedisStore(),
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // Only 10 uploads per hour
@@ -109,11 +117,11 @@ const createUploadLimiter = () => rateLimit({
       method: req.method,
       userId: req.user?.userId || 'unknown'
     });
-  }
-});
+}
+}));
 
 // Admin endpoints rate limiter (most restrictive)
-const createAdminLimiter = () => rateLimit({
+const createAdminLimiter = () => rateLimit(sanitizeOptionsForTests({
   store: getRedisStore(),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20, // Only 20 admin requests per 15 minutes
@@ -132,11 +140,11 @@ const createAdminLimiter = () => rateLimit({
       userId: req.user?.userId || 'unknown',
       userRole: req.user?.role || 'unknown'
     });
-  }
-});
+}
+}));
 
 // User-based rate limiter (per user instead of per IP)
-const createUserLimiter = (options = {}) => rateLimit({
+const createUserLimiter = (options = {}) => rateLimit(sanitizeOptionsForTests({
   store: getRedisStore(),
   windowMs: options.windowMs || 15 * 60 * 1000,
   max: options.max || 100,
@@ -158,11 +166,11 @@ const createUserLimiter = (options = {}) => rateLimit({
       path: req.path,
       method: req.method
     });
-  }
-});
+}
+}));
 
 // Burst rate limiter for handling traffic spikes
-const createBurstLimiter = () => rateLimit({
+const createBurstLimiter = () => rateLimit(sanitizeOptionsForTests({
   store: getRedisStore(),
   windowMs: 60 * 1000, // 1 minute
   max: 30, // Max 30 requests per minute
@@ -180,8 +188,8 @@ const createBurstLimiter = () => rateLimit({
       method: req.method,
       userAgent: req.get('User-Agent')
     });
-  }
-});
+}
+}));
 
 // Export all rate limiters
 module.exports = {
@@ -193,10 +201,10 @@ module.exports = {
   userLimiter: createUserLimiter(),
   burstLimiter: createBurstLimiter(),
   createUserLimiter,
-  createCustomLimiter: (options) => rateLimit({
+  createCustomLimiter: (options) => rateLimit(sanitizeOptionsForTests({
     store: getRedisStore(),
     ...options,
     standardHeaders: true,
     legacyHeaders: false
-  })
+  }))
 };

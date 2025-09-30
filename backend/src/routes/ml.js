@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, param, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
+const { authenticateToken, requireRole } = require('../middleware/auth');
 
 // Import ML services
 const MLScoringService = require('../services/ml/MLScoringService');
@@ -195,7 +196,12 @@ router.get('/models/:modelId', [
  * POST /api/ml/models/train
  * Train a new ML model
  */
-router.post('/models/train', adminRateLimit, trainModelValidation, async (req, res) => {
+router.post('/models/train',
+  authenticateToken,
+  requireRole(['admin']),
+  adminRateLimit,
+  trainModelValidation,
+  async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -249,13 +255,18 @@ router.post('/models/train', adminRateLimit, trainModelValidation, async (req, r
       message: 'Failed to train model'
     });
   }
-});
+  });
 
 /**
  * POST /api/ml/models/:modelId/deploy
  * Deploy a specific model as active
  */
-router.post('/models/:modelId/deploy', adminRateLimit, deployModelValidation, async (req, res) => {
+router.post('/models/:modelId/deploy',
+  authenticateToken,
+  requireRole(['admin']),
+  adminRateLimit,
+  deployModelValidation,
+  async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -319,15 +330,20 @@ router.post('/models/:modelId/deploy', adminRateLimit, deployModelValidation, as
       message: 'Failed to deploy model'
     });
   }
-});
+  });
 
 /**
  * DELETE /api/ml/models/:modelId
  * Delete a model (admin only)
  */
-router.delete('/models/:modelId', adminRateLimit, [
+router.delete('/models/:modelId',
+  authenticateToken,
+  requireRole(['admin']),
+  adminRateLimit,
+  [
   param('modelId').isString().notEmpty().withMessage('Model ID is required')
-], async (req, res) => {
+  ],
+  async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -388,7 +404,7 @@ router.delete('/models/:modelId', adminRateLimit, [
       message: 'Failed to delete model'
     });
   }
-});
+  });
 
 /**
  * GET /api/ml/features/extract/:leadId

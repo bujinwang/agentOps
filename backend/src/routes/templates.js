@@ -160,8 +160,11 @@ router.post('/:id/render', async (req, res) => {
 router.get('/:id/variants', async (req, res) => {
     try {
         const templateId = parseInt(req.params.id);
-        // TODO: Implement variant fetching
-        res.json({ variants: [] });
+        const variants = await TemplatePersonalizationService.getTemplateVariants(
+            req.user.userId,
+            templateId
+        );
+        res.json({ variants, count: variants.length });
     } catch (error) {
         console.error('Error fetching variants:', error);
         res.status(500).json({ error: 'Failed to fetch variants' });

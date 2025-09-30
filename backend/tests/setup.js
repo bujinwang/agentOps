@@ -40,6 +40,32 @@ jest.mock('../src/config/logger', () => ({
   }
 }));
 
+jest.mock('../src/config/metrics', () => {
+  const noop = () => {};
+  const metricsRegistry = {
+    incrementCounter: jest.fn(),
+    setGauge: jest.fn(),
+    observeHistogram: jest.fn(),
+    createCounter: jest.fn(),
+    createGauge: jest.fn(),
+    createHistogram: jest.fn()
+  };
+
+  return {
+    metricsRegistry,
+    initializeMetrics: jest.fn(),
+    metricsMiddleware: (req, res, next) => next(),
+    metricsEndpoint: (req, res) => res.json({ metrics: [] }),
+    recordLeadCreated: jest.fn(),
+    recordLeadConverted: jest.fn(),
+    recordInteractionCreated: jest.fn(),
+    recordNotificationSent: jest.fn(),
+    recordDatabaseQuery: jest.fn(),
+    recordDatabaseError: jest.fn(),
+    recordRedisOperation: jest.fn()
+  };
+});
+
 jest.mock('../src/config/redis', () => ({
   connectRedis: jest.fn(),
   getRedisClient: jest.fn(() => ({
@@ -65,23 +91,31 @@ const mockPool = {
 };
 
 jest.mock('../src/config/database', () => ({
-  ...jest.requireActual('../src/config/database'),
+  connectDatabase: jest.fn(),
+  closeDatabase: jest.fn(),
   getDatabase: jest.fn(() => mockPool),
   executeQuery: jest.fn(),
-  executeWithCache: jest.fn()
+  executeWithCache: jest.fn(),
+  getConnectionStats: jest.fn(() => ({})),
+  getQueryStats: jest.fn(() => ({ avgQueryTime: 0, slowQueries: 0, totalQueries: 0 })),
+  startHealthMonitoring: jest.fn(),
+  stopHealthMonitoring: jest.fn(),
+  query: mockPool.query
 }));
-
-// Also mock the pool export directly for services that import it
-jest.mock('../src/config/database', () => ({
-  ...jest.requireActual('../src/config/database'),
-  getDatabase: jest.fn(() => mockPool),
-  executeQuery: jest.fn(),
-  executeWithCache: jest.fn()
-}), { virtual: true });
 
 // Mock cache service
 jest.mock('../src/services/CacheService', () => ({
-  invalidateUserData: jest.fn(),
-  getUserDashboard: jest.fn(),
-  setUserDashboard: jest.fn()
+  cacheService: {
+    get: jest.fn(),
+    set: jest.fn(),
+    delete: jest.fn(),
+    clear: jest.fn()
+  },
+  cacheMiddleware: () => (req, res, next) => next(),
+  cacheInvalidation: {
+    invalidateUserCache: jest.fn(),
+    invalidateLeadCache: jest.fn(),
+    invalidateResourceCache: jest.fn()
+  },
+  CACHE_CONFIG: { defaultTTL: 300 }
 }));

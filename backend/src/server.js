@@ -170,12 +170,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Performance monitoring middleware
 app.use(responseTimeMonitor);
 app.use(throughputMonitor);
-app.use(memoryMonitor(0.8)); // Alert on memory usage > 80%
+app.use(resourceMemoryMonitor(0.8)); // Alert on memory usage > 80%
 app.use(cpuMonitor(0.7)); // Alert on CPU usage > 70%
 
 // Legacy monitoring (keeping for compatibility)
-app.use(requestMonitor);
-app.use(performanceMonitor(1000)); // Alert on requests > 1 second
+app.use(legacyPerformanceMonitor(1000)); // Alert on requests > 1 second
 
 // Logging middleware
 app.use(morgan('combined', {
@@ -653,6 +652,8 @@ function clearShutdownTimeout() {
   }
 }
 
-startServer();
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
 module.exports = app;

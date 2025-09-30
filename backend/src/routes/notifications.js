@@ -172,32 +172,89 @@ router.get('/', async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
-    // This would typically query the notifications table
-    // For now, return mock data
-    const notifications = [
-      {
-        id: 1,
-        title: 'Welcome to the system',
-        message: 'Your account has been set up successfully',
-        type: 'info',
-        read: false,
-        createdAt: new Date().toISOString()
-      }
-    ];
+    const { getDatabase } = require('../config/database');
+    const db = getDatabase();
+
+    // Build query conditions
+    let whereConditions = ['user_id = $1'];
+    let queryParams = [userId];
+    let paramIndex = 2;
+
+    if (type) {
+      whereConditions.push(`type = $${paramIndex}`);
+      queryParams.push(type);
+      paramIndex++;
+    }
+
+    if (read !== undefined) {
+      whereConditions.push(`read = $${paramIndex}`);
+      queryParams.push(read === 'true');
+      paramIndex++;
+    }
+
+    // Note: No expiration filter since expires_at column doesn't exist in current schema
+
+    const whereClause = whereConditions.join(' AND ');
+
+    // Get total count
+    const countQuery = `SELECT COUNT(*) as total FROM notifications WHERE ${whereClause}`;
+    const countResult = await db.query(countQuery, queryParams);
+    const total = parseInt(countResult.rows[0].total);
+
+    // Get notifications with pagination
+    const sortDirection = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    const allowedSortFields = ['created_at', 'updated_at'];
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';
+
+    const notificationsQuery = `
+      SELECT
+        notification_id as id,
+        title,
+        message,
+        type,
+        read,
+        related_id,
+        related_type,
+        action_url,
+        created_at,
+        updated_at
+      FROM notifications
+      WHERE ${whereClause}
+      ORDER BY ${sortField} ${sortDirection}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    queryParams.push(parseInt(limit), parseInt(offset));
+    const notificationsResult = await db.query(notificationsQuery, queryParams);
+
+    const notifications = notificationsResult.rows.map(notification => ({
+      id: notification.id,
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      read: notification.read,
+      relatedId: notification.related_id,
+      relatedType: notification.related_type,
+      actionUrl: notification.action_url,
+      createdAt: notification.created_at,
+      updatedAt: notification.updated_at
+    }));
 
     sendResponse(res, {
       notifications,
       pagination: {
-        total: notifications.length,
+        total,
         limit: parseInt(limit),
-        offset: parseInt(offset)
+        offset: parseInt(offset),
+        hasMore: (parseInt(offset) + parseInt(limit)) < total
       }
     }, 'Notifications retrieved successfully');
 
   } catch (error) {
     logger.error('Get notifications error', {
       userId: req.user?.userId,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
     sendError(res, 'Failed to get notifications', 'NOTIFICATION_ERROR', null, 500);
   }
@@ -212,23 +269,42 @@ router.put('/:id/read', async (req, res) => {
     const notificationId = parseInt(req.params.id);
     const userId = req.user.userId;
 
-    // This would typically update the notification in the database
-    // For now, just acknowledge
-    logger.info('Marking notification as read', {
+    const { getDatabase } = require('../config/database');
+    const db = getDatabase();
+
+    // Update notification as read
+    const updateQuery = `
+      UPDATE notifications
+      SET read = true, updated_at = NOW()
+      WHERE notification_id = $1 AND user_id = $2
+      RETURNING notification_id as id, read, updated_at
+    `;
+
+    const result = await db.query(updateQuery, [notificationId, userId]);
+
+    if (result.rows.length === 0) {
+      return sendError(res, 'Notification not found or access denied', 'NOTIFICATION_ERROR', null, 404);
+    }
+
+    const notification = result.rows[0];
+
+    logger.info('Marked notification as read', {
       notificationId,
       userId
     });
 
     sendResponse(res, {
-      notificationId,
-      read: true
+      notificationId: notification.id,
+      read: notification.read,
+      updatedAt: notification.updated_at
     }, 'Notification marked as read');
 
   } catch (error) {
     logger.error('Mark notification read error', {
       notificationId: req.params.id,
       userId: req.user?.userId,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
     sendError(res, 'Failed to mark notification as read', 'NOTIFICATION_ERROR', null, 500);
   }
@@ -243,8 +319,23 @@ router.delete('/:id', async (req, res) => {
     const notificationId = parseInt(req.params.id);
     const userId = req.user.userId;
 
-    // This would typically delete the notification from the database
-    logger.info('Deleting notification', {
+    const { getDatabase } = require('../config/database');
+    const db = getDatabase();
+
+    // Delete notification (only if it belongs to the user)
+    const deleteQuery = `
+      DELETE FROM notifications
+      WHERE notification_id = $1 AND user_id = $2
+      RETURNING notification_id as id
+    `;
+
+    const result = await db.query(deleteQuery, [notificationId, userId]);
+
+    if (result.rows.length === 0) {
+      return sendError(res, 'Notification not found or access denied', 'NOTIFICATION_ERROR', null, 404);
+    }
+
+    logger.info('Deleted notification', {
       notificationId,
       userId
     });
@@ -258,7 +349,8 @@ router.delete('/:id', async (req, res) => {
     logger.error('Delete notification error', {
       notificationId: req.params.id,
       userId: req.user?.userId,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
     sendError(res, 'Failed to delete notification', 'NOTIFICATION_ERROR', null, 500);
   }
@@ -301,21 +393,62 @@ router.get('/stats', async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // This would typically aggregate notification statistics
+    const { getDatabase } = require('../config/database');
+    const db = getDatabase();
+
+    // Get total and unread counts
+    const countQuery = `
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE read = false) as unread,
+        COUNT(*) FILTER (WHERE read = false AND created_at >= NOW() - INTERVAL '24 hours') as unread_last_24h,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours') as total_last_24h,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') as total_last_week,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') as total_last_month
+      FROM notifications
+      WHERE user_id = $1
+    `;
+
+    const countResult = await db.query(countQuery, [userId]);
+    const counts = countResult.rows[0];
+
+    // Get breakdown by type
+    const typeQuery = `
+      SELECT
+        type,
+        COUNT(*) as count,
+        COUNT(*) FILTER (WHERE read = false) as unread_count
+      FROM notifications
+      WHERE user_id = $1
+      GROUP BY type
+    `;
+
+    const typeResult = await db.query(typeQuery, [userId]);
+    const byType = {};
+    const byTypeUnread = {};
+
+    typeResult.rows.forEach(row => {
+      byType[row.type] = parseInt(row.count);
+      byTypeUnread[row.type] = parseInt(row.unread_count);
+    });
+
+    // Note: Priority breakdown not available since priority column doesn't exist in current schema
+    const byPriority = {};
+
     const stats = {
-      total: 25,
-      unread: 5,
-      byType: {
-        info: 12,
-        warning: 8,
-        success: 3,
-        error: 2
-      },
+      total: parseInt(counts.total),
+      unread: parseInt(counts.unread),
+      byType,
+      byTypeUnread,
+      byPriority,
       recentActivity: {
-        last24Hours: 3,
-        lastWeek: 12,
-        lastMonth: 25
-      }
+        last24Hours: parseInt(counts.total_last_24h),
+        lastWeek: parseInt(counts.total_last_week),
+        lastMonth: parseInt(counts.total_last_month),
+        unreadLast24Hours: parseInt(counts.unread_last_24h)
+      },
+      // Additional computed metrics
+      readRate: counts.total > 0 ? ((counts.total - counts.unread) / counts.total * 100).toFixed(1) : '0.0'
     };
 
     sendResponse(res, stats, 'Notification statistics retrieved successfully');
@@ -323,7 +456,8 @@ router.get('/stats', async (req, res) => {
   } catch (error) {
     logger.error('Get notification stats error', {
       userId: req.user?.userId,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
     sendError(res, 'Failed to get notification statistics', 'STATS_ERROR', null, 500);
   }

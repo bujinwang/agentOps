@@ -69,11 +69,21 @@ INSERT INTO tasks (
 (2, 1, 'Initial client call', 'Make first contact call to assess needs', NOW() - INTERVAL '1 day', 'High', TRUE, NOW() - INTERVAL '1 day', NOW() - INTERVAL '2 days', NOW() - INTERVAL '1 day'),
 (3, 1, 'Send welcome package', 'Email welcome package and service overview', NOW() - INTERVAL '4 days', 'Medium', TRUE, NOW() - INTERVAL '4 days', NOW() - INTERVAL '5 days', NOW() - INTERVAL '4 days');
 
+-- Insert sample notifications
+INSERT INTO notifications (user_id, title, message, type, priority, related_type, related_id, created_at) VALUES
+(1, 'Welcome to Real Estate CRM', 'Your account has been set up successfully. Start by adding your first lead!', 'info', 'normal', NULL, NULL, NOW()),
+(1, 'Lead Status Update', 'Jane Smith''s status changed to "Contacted"', 'lead_update', 'normal', 'lead', 1, NOW() - INTERVAL '2 hours'),
+(1, 'Task Due Soon', 'Send property listings task is due tomorrow', 'task_update', 'high', 'task', 1, NOW() - INTERVAL '1 hour'),
+(1, 'New Lead Added', 'Michael Johnson was added as a new lead', 'lead_update', 'normal', 'lead', 2, NOW() - INTERVAL '30 minutes'),
+(2, 'System Maintenance', 'Scheduled maintenance will occur tonight from 2-4 AM EST', 'warning', 'normal', NULL, NULL, NOW() - INTERVAL '4 hours');
+
 -- Verify data insertion
 SELECT 'Users created:' as info, COUNT(*) as count FROM users
 UNION ALL
-SELECT 'Leads created:', COUNT(*) FROM leads  
+SELECT 'Leads created:', COUNT(*) FROM leads
 UNION ALL
 SELECT 'Interactions created:', COUNT(*) FROM interactions
 UNION ALL
-SELECT 'Tasks created:', COUNT(*) FROM tasks;
+SELECT 'Tasks created:', COUNT(*) FROM tasks
+UNION ALL
+SELECT 'Notifications created:', COUNT(*) FROM notifications;

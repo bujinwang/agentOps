@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import leadScoringService from '../services/LeadScoringService';
-import leadScoreApiService from '../services/leadScoreApiService';
+import { analyticsService, DashboardKPIs, LeadAnalytics as BackendLeadAnalytics } from '../services/AnalyticsService';
+import apiService from '../services/api';
 import { useConversionTracking } from './useConversionTracking';
 import { ConversionFunnelData, ConversionMetrics } from '../types/conversion';
 
@@ -73,6 +74,74 @@ interface UseLeadAnalyticsReturn {
   timeRange: TimeRange;
 }
 
+const mapTimeRangeToTimeframe = (range: TimeRange): 'week' | 'month' | 'quarter' => {
+  switch (range) {
+    case '7d':
+      return 'week';
+    case '90d':
+    case '1y':
+      return 'quarter';
+    default:
+      return 'month';
+  }
+};
+
+const buildScoreDistributionFromKpis = (kpis?: DashboardKPIs | null): ScoreDistributionItem[] => {
+  if (!kpis) {
+    return [];
+  }
+
+  const high = kpis.highScoreLeads ?? 0;
+  const medium = kpis.mediumScoreLeads ?? 0;
+  const low = kpis.lowScoreLeads ?? 0;
+  const total = high + medium + low;
+
+  if (total === 0) {
+    return [];
+  }
+
+  return [
+    {
+      grade: 'High',
+      count: high,
+      percentage: Math.round((high / total) * 100),
+      color: '#4CAF50'
+    },
+    {
+      grade: 'Medium',
+      count: medium,
+      percentage: Math.round((medium / total) * 100),
+      color: '#FFC107'
+    },
+    {
+      grade: 'Low',
+      count: low,
+      percentage: Math.round((low / total) * 100),
+      color: '#F44336'
+    }
+  ];
+};
+
+const buildScoreTrendsFromLeadStats = (leadStats?: BackendLeadAnalytics | null): ScoreTrendItem[] => {
+  if (!leadStats || !leadStats.leadsOverTime) {
+    return [];
+  }
+
+  return leadStats.leadsOverTime.map((point) => {
+    const date = point.date || point.timestamp;
+    const parsedDate = date ? new Date(date) : null;
+    const label = parsedDate
+      ? parsedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      : point.label || '';
+
+    return {
+      date: date || new Date().toISOString(),
+      value: typeof point.count === 'number' ? point.count : Number(point.value) || 0,
+      label
+    };
+  });
+};
+
 const useLeadAnalytics = (options: UseLeadAnalyticsOptions = {}): UseLeadAnalyticsReturn => {
   const {
     timeRange: initialTimeRange = '30d',
@@ -97,6 +166,8 @@ const useLeadAnalytics = (options: UseLeadAnalyticsOptions = {}): UseLeadAnalyti
     autoRefresh: false, // We'll handle refresh manually
     refreshInterval: undefined
   });
+
+  const analyticsClient = useMemo(() => analyticsService, []);
 
   const generateLocalAnalytics = useCallback(async (): Promise<LeadAnalyticsData> => {
     // Generate analytics from local scoring service when backend is unavailable
@@ -260,107 +331,75 @@ const useLeadAnalytics = (options: UseLeadAnalyticsOptions = {}): UseLeadAnalyti
   }, []);
 
   const fetchAnalyticsData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
     try {
-      setLoading(true);
-      setError(null);
+      const timeframe = mapTimeRangeToTimeframe(timeRange);
 
-      // Try to fetch real analytics data from backend
+      const [fallbackData, kpis, leadStats, scoringStats] = await Promise.all([
+        generateLocalAnalytics(),
+        analyticsClient.getDashboardKPIs().catch(() => null),
+        analyticsClient.getLeadAnalytics(timeframe).catch(() => null),
+        apiService.getScoringStats().catch(() => null)
+      ]);
+
+      await loadFunnelData();
+      await loadMetrics();
+
+      const summary: LeadAnalyticsSummary = {
+        ...fallbackData.summary,
+        totalLeads: kpis?.totalLeads ?? fallbackData.summary.totalLeads,
+        averageScore: scoringStats?.data?.summary?.averageScore ?? fallbackData.summary.averageScore,
+        highQualityLeads: kpis?.highScoreLeads ?? fallbackData.summary.highQualityLeads,
+        conversionRate: kpis?.conversionRate ?? fallbackData.summary.conversionRate
+      };
+
+      const scoreDistribution = buildScoreDistributionFromKpis(kpis);
+      const scoreTrends = buildScoreTrendsFromLeadStats(leadStats);
+
+      const enhancedData: LeadAnalyticsData = {
+        ...fallbackData,
+        summary,
+        scoreDistribution: scoreDistribution.length ? scoreDistribution : fallbackData.scoreDistribution,
+        scoreTrends: scoreTrends.length ? scoreTrends : fallbackData.scoreTrends,
+        conversionFunnel,
+        conversionMetrics
+      };
+
+      setData(enhancedData);
+
+      if (!kpis && !leadStats) {
+        setError('Analytics service unavailable. Showing estimated values.');
+      }
+    } catch (err) {
+      console.warn('Analytics fetch failed, reverting to local calculations:', err);
+
       try {
-        // For now, we'll aggregate data from multiple API calls
-        // In a production system, this would be a single analytics endpoint
-
-        // Get all leads with scores (this would need a new endpoint)
-        // For now, we'll use mock data but mark it as coming from backend
-        const mockData: LeadAnalyticsData = {
-          summary: {
-            totalLeads: 147,
-            averageScore: 74.2,
-            highQualityLeads: 45,
-            conversionRate: 23.4,
-            topPerformingAgent: 'Sarah Johnson',
-            bestPropertyType: 'Single Family',
-            urgentLeads: 28
-          },
-          scoreDistribution: [
-            { grade: 'A+', count: 12, percentage: 8.2, color: '#4CAF50' },
-            { grade: 'A', count: 28, percentage: 19.0, color: '#8BC34A' },
-            { grade: 'B+', count: 35, percentage: 23.8, color: '#2196F3' },
-            { grade: 'B', count: 42, percentage: 28.6, color: '#03A9F4' },
-            { grade: 'C+', count: 18, percentage: 12.2, color: '#FF9800' },
-            { grade: 'C', count: 10, percentage: 6.8, color: '#FF9800' },
-            { grade: 'D', count: 2, percentage: 1.4, color: '#F44336' }
-          ],
-          scoreTrends: [
-            { date: '2024-01-01', value: 72.3, label: 'Jan' },
-            { date: '2024-02-01', value: 74.1, label: 'Feb' },
-            { date: '2024-03-01', value: 71.8, label: 'Mar' },
-            { date: '2024-04-01', value: 76.2, label: 'Apr' },
-            { date: '2024-05-01', value: 78.5, label: 'May' }
-          ],
-          conversionByGrade: [
-            { grade: 'A+', conversionRate: 85, leadCount: 12 },
-            { grade: 'A', conversionRate: 78, leadCount: 28 },
-            { grade: 'B+', conversionRate: 65, leadCount: 35 },
-            { grade: 'B', conversionRate: 52, leadCount: 42 },
-            { grade: 'C+', conversionRate: 35, leadCount: 18 },
-            { grade: 'C', conversionRate: 28, leadCount: 10 }
-          ],
-          propertyTypePerformance: [
-            { type: 'Single Family', avgScore: 82.3, leadCount: 45 },
-            { type: 'Condo', avgScore: 76.8, leadCount: 38 },
-            { type: 'Townhouse', avgScore: 74.2, leadCount: 32 },
-            { type: 'Multi-Family', avgScore: 71.5, leadCount: 22 },
-            { type: 'Land', avgScore: 68.9, leadCount: 10 }
-          ],
-          geographicPerformance: [
-            { region: 'Downtown', avgScore: 84.2, leadCount: 28 },
-            { region: 'Suburbs', avgScore: 78.6, leadCount: 52 },
-            { region: 'Rural', avgScore: 72.1, leadCount: 35 },
-            { region: 'Waterfront', avgScore: 86.7, leadCount: 18 },
-            { region: 'Commercial', avgScore: 69.4, leadCount: 14 }
-          ]
-        };
-
-        // TODO: Replace with actual backend API calls when analytics endpoint is available
-        // const analyticsResponse = await fetch(`${API_BASE_URL}/analytics/leads?timeRange=${timeRange}`);
-        // const analyticsData = await analyticsResponse.json();
-
-        // Load conversion data
-        await loadFunnelData();
-        await loadMetrics();
-
-        // Combine lead analytics with conversion data
-        const enhancedData: LeadAnalyticsData = {
-          ...mockData,
-          conversionFunnel,
-          conversionMetrics
-        };
-
-        setData(enhancedData);
-      } catch (apiError) {
-        console.warn('Backend analytics not available, using local calculation:', apiError);
-
-        // Fallback to local calculation if backend is unavailable
         const localData = await generateLocalAnalytics();
-
-        // Load conversion data for fallback
         await loadFunnelData();
         await loadMetrics();
 
-        const enhancedLocalData: LeadAnalyticsData = {
+        setData({
           ...localData,
           conversionFunnel,
           conversionMetrics
-        };
-
-        setData(enhancedLocalData);
+        });
+      } catch (fallbackError) {
+        setError(fallbackError instanceof Error ? fallbackError.message : 'Failed to fetch analytics data');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
     } finally {
       setLoading(false);
     }
-  }, [timeRange, loadFunnelData, loadMetrics, conversionFunnel, conversionMetrics]);
+  }, [
+    timeRange,
+    analyticsClient,
+    generateLocalAnalytics,
+    loadFunnelData,
+    loadMetrics,
+    conversionFunnel,
+    conversionMetrics
+  ]);
 
   const refresh = useCallback(async () => {
     await fetchAnalyticsData();

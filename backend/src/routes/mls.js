@@ -133,14 +133,58 @@ router.post('/webhooks/mls/property-update', mlsDataValidation, handleValidation
  */
 router.get('/status', authenticate, async (req, res) => {
   try {
-    // This would typically query the database for MLS integration metrics
+    const db = require('../config/database');
+
+    // Get basic MLS statistics
+    const statsQuery = `
+      SELECT
+        COUNT(*) as total_properties,
+        COUNT(*) FILTER (WHERE status = 'active') as active_listings,
+        COUNT(*) FILTER (WHERE updated_at >= CURRENT_DATE - INTERVAL '24 hours') as recent_updates
+      FROM properties
+      WHERE deleted_at IS NULL AND mls_id IS NOT NULL
+    `;
+
+    // Get last sync information
+    const lastSyncQuery = `
+      SELECT
+        completed_at as last_sync,
+        status as sync_status,
+        results->>'recordsProcessed' as records_processed
+      FROM mls_sync_logs
+      WHERE status IN ('completed', 'failed')
+      ORDER BY completed_at DESC
+      LIMIT 1
+    `;
+
+    // Get current sync status
+    const currentSyncQuery = `
+      SELECT sync_id, status, started_at
+      FROM mls_sync_logs
+      WHERE status = 'running'
+      ORDER BY started_at DESC
+      LIMIT 1
+    `;
+
+    const [statsResult, lastSyncResult, currentSyncResult] = await Promise.all([
+      db.query(statsQuery),
+      db.query(lastSyncQuery),
+      db.query(currentSyncQuery)
+    ]);
+
+    const stats = statsResult.rows[0];
+    const lastSync = lastSyncResult.rows[0];
+    const currentSync = currentSyncResult.rows[0];
+
     const status = {
-      lastSync: new Date().toISOString(),
-      totalProperties: 1250,
-      activeListings: 890,
-      recentUpdates: 45,
-      syncStatus: 'healthy',
-      nextScheduledSync: new Date(Date.now() + 3600000).toISOString() // 1 hour from now
+      lastSync: lastSync?.last_sync || null,
+      totalProperties: parseInt(stats.total_properties || 0),
+      activeListings: parseInt(stats.active_listings || 0),
+      recentUpdates: parseInt(stats.recent_updates || 0),
+      syncStatus: currentSync ? 'running' : 'idle',
+      currentSyncId: currentSync?.sync_id || null,
+      nextScheduledSync: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+      lastSyncRecordsProcessed: lastSync?.records_processed ? parseInt(lastSync.records_processed) : 0
     };
 
     sendResponse(res, status, 'MLS status retrieved successfully');
@@ -181,19 +225,83 @@ router.post('/sync', authenticate, async (req, res) => {
 router.get('/properties/:mlsNumber', authenticate, async (req, res) => {
   try {
     const { mlsNumber } = req.params;
+    const db = require('../config/database');
 
-    // This would typically query the database for property details
-    // For now, return mock data
-    const property = {
-      mlsNumber,
-      address: '123 Main St, Anytown, USA',
-      price: 450000,
-      status: 'Active',
-      lastUpdated: new Date().toISOString(),
+    // Query property details
+    const propertyQuery = `
+      SELECT
+        p.id,
+        p.mls_id,
+        p.title,
+        p.description,
+        p.public_remarks,
+        p.price,
+        p.status,
+        p.property_type,
+        p.address,
+        p.details,
+        p.marketing,
+        p.mls_provider,
+        p.mls_status,
+        p.mls_listing_date,
+        p.created_at,
+        p.updated_at,
+        COALESCE(
+          (
+            SELECT json_agg(json_build_object(
+              'url', pm.url,
+              'type', pm.media_type,
+              'isPrimary', pm.is_primary,
+              'title', pm.title,
+              'description', pm.description
+            ) ORDER BY pm.is_primary DESC, pm.sort_order ASC)
+            FROM property_media pm
+            WHERE pm.property_id = p.id
+          ), '[]'::json
+        ) AS photos
+      FROM properties p
+      WHERE p.mls_id = $1 AND p.deleted_at IS NULL
+      LIMIT 1
+    `;
+
+    const result = await db.query(propertyQuery, [mlsNumber]);
+
+    if (result.rows.length === 0) {
+      return sendError(res, 'Property not found', 'PROPERTY_NOT_FOUND', null, 404);
+    }
+
+    const property = result.rows[0];
+
+    // Format response
+    const formattedProperty = {
+      id: property.id,
+      mlsNumber: property.mls_id,
+      title: property.title,
+      description: property.description || property.public_remarks,
+      address: property.address?.street || 'Address not available',
+      city: property.address?.city,
+      state: property.address?.state,
+      zipCode: property.address?.zip_code,
+      price: property.price,
+      status: property.status,
+      propertyType: property.property_type,
+      bedrooms: property.details?.bedrooms,
+      bathrooms: property.details?.bathrooms,
+      squareFeet: property.details?.square_feet,
+      lotSize: property.details?.lot_size,
+      yearBuilt: property.details?.year_built,
+      listingAgent: property.marketing?.listing_agent || property.marketing?.agent,
+      listingOffice: property.marketing?.listing_office,
+      photos: Array.isArray(property.photos) ? property.photos : [],
+      mlsProvider: property.mls_provider,
+      mlsStatus: property.mls_status,
+      mlsListingDate: property.mls_listing_date,
+      lastUpdated: property.updated_at,
+      createdAt: property.created_at,
       source: 'MLS'
     };
 
-    sendResponse(res, property, 'Property details retrieved successfully');
+    sendResponse(res, formattedProperty, 'Property details retrieved successfully');
   } catch (error) {
     logger.error('Error getting property details:', error);
     sendError(res, 'Failed to get property details', 'PROPERTY_ERROR', null, 500);
@@ -206,22 +314,64 @@ router.get('/properties/:mlsNumber', authenticate, async (req, res) => {
  */
 router.get('/stats', authenticate, async (req, res) => {
   try {
-    // This would typically aggregate MLS statistics from the database
-    const stats = {
-      totalProperties: 1250,
-      activeListings: 890,
-      soldThisMonth: 45,
-      averagePrice: 425000,
-      priceChange: '+2.3%',
-      topNeighborhoods: [
-        { name: 'Downtown', count: 120, avgPrice: 550000 },
-        { name: 'Suburb A', count: 95, avgPrice: 380000 },
-        { name: 'Suburb B', count: 85, avgPrice: 420000 }
-      ],
+    const db = require('../config/database');
+
+    // Get comprehensive MLS statistics
+    const statsQuery = `
+      SELECT
+        COUNT(*) as total_properties,
+        COUNT(*) FILTER (WHERE status = 'active') as active_listings,
+        COUNT(*) FILTER (WHERE status = 'sold' AND updated_at >= CURRENT_DATE - INTERVAL '30 days') as sold_this_month,
+        ROUND(AVG(price) FILTER (WHERE price > 0)) as average_price,
+        ROUND(AVG(price) FILTER (WHERE price > 0 AND updated_at >= CURRENT_DATE - INTERVAL '30 days')) as current_avg_price,
+        ROUND(AVG(price) FILTER (WHERE price > 0 AND updated_at >= CURRENT_DATE - INTERVAL '60 days' AND updated_at < CURRENT_DATE - INTERVAL '30 days')) as previous_avg_price
+      FROM properties
+      WHERE deleted_at IS NULL AND mls_id IS NOT NULL
+    `;
+
+    // Get top neighborhoods
+    const neighborhoodsQuery = `
+      SELECT
+        COALESCE(address->>'city', 'Unknown') as neighborhood,
+        COUNT(*) as count,
+        ROUND(AVG(price)) as avg_price
+      FROM properties
+      WHERE deleted_at IS NULL AND mls_id IS NOT NULL AND status = 'active' AND price > 0
+      GROUP BY address->>'city'
+      HAVING COUNT(*) >= 2
+      ORDER BY count DESC
+      LIMIT 5
+    `;
+
+    const [statsResult, neighborhoodsResult] = await Promise.all([
+      db.query(statsQuery),
+      db.query(neighborhoodsQuery)
+    ]);
+
+    const stats = statsResult.rows[0];
+
+    // Calculate price change
+    let priceChange = '0.0%';
+    if (stats.current_avg_price && stats.previous_avg_price && stats.previous_avg_price > 0) {
+      const change = ((stats.current_avg_price - stats.previous_avg_price) / stats.previous_avg_price) * 100;
+      priceChange = `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`;
+    }
+
+    const formattedStats = {
+      totalProperties: parseInt(stats.total_properties || 0),
+      activeListings: parseInt(stats.active_listings || 0),
+      soldThisMonth: parseInt(stats.sold_this_month || 0),
+      averagePrice: parseInt(stats.average_price || 0),
+      priceChange,
+      topNeighborhoods: neighborhoodsResult.rows.map(row => ({
+        name: row.neighborhood,
+        count: parseInt(row.count),
+        avgPrice: parseInt(row.avg_price)
+      })),
       lastUpdated: new Date().toISOString()
     };
 
-    sendResponse(res, stats, 'MLS statistics retrieved successfully');
+    sendResponse(res, formattedStats, 'MLS statistics retrieved successfully');
   } catch (error) {
     logger.error('Error getting MLS stats:', error);
     sendError(res, 'Failed to get MLS statistics', 'STATS_ERROR', null, 500);

@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const MLSSyncService = require('../services/MLSSyncService');
 const MLSSyncScheduler = require('../services/MLSSyncScheduler');
-const { authenticateToken } = require('../middleware/auth');
-const { sendResponse, sendError } = require('../utils/responseHelper');
+const { authenticateToken, requireRole } = require('../middleware/auth');
+const { sendResponse, sendError } = require('../utils/responseFormatter');
 
 /**
  * @route GET /api/mls/sync/status
@@ -100,7 +100,7 @@ router.get('/errors', authenticateToken, async (req, res) => {
  * @desc Get scheduler status
  * @access Private
  */
-router.get('/scheduler/status', authenticateToken, async (req, res) => {
+router.get('/scheduler/status', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     const status = MLSSyncScheduler.getStatus();
 
@@ -116,13 +116,8 @@ router.get('/scheduler/status', authenticateToken, async (req, res) => {
  * @desc Start the MLS sync scheduler
  * @access Private (Admin only)
  */
-router.post('/scheduler/start', authenticateToken, async (req, res) => {
+router.post('/scheduler/start', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    // TODO: Add admin role check
-    // if (req.user.role !== 'admin') {
-    //   return sendError(res, 'Admin access required', 403);
-    // }
-
     MLSSyncScheduler.start();
 
     sendResponse(res, { status: 'started' }, 'MLS sync scheduler started successfully');
@@ -137,13 +132,8 @@ router.post('/scheduler/start', authenticateToken, async (req, res) => {
  * @desc Stop the MLS sync scheduler
  * @access Private (Admin only)
  */
-router.post('/scheduler/stop', authenticateToken, async (req, res) => {
+router.post('/scheduler/stop', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    // TODO: Add admin role check
-    // if (req.user.role !== 'admin') {
-    //   return sendError(res, 'Admin access required', 403);
-    // }
-
     MLSSyncScheduler.stop();
 
     sendResponse(res, { status: 'stopped' }, 'MLS sync scheduler stopped successfully');

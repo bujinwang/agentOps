@@ -174,33 +174,102 @@ class MLSSyncService {
    * @returns {Promise<Array>} MLS data
    */
   async fetchMLSData(fullSync = false) {
-    // This would be replaced with actual MLS API calls
-    // For now, simulate data fetching
     logger.info('Fetching MLS data', { fullSync });
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const db = this.db.getDatabase();
 
-    // Return mock data structure
-    return {
-      properties: [
-        {
-          mlsNumber: 'MLS001',
-          address: '123 Main St',
-          price: 450000,
-          status: 'Active',
-          lastUpdated: new Date().toISOString()
-        },
-        {
-          mlsNumber: 'MLS002',
-          address: '456 Oak Ave',
-          price: 380000,
-          status: 'Pending',
-          lastUpdated: new Date().toISOString()
-        }
-      ],
-      lastSyncTimestamp: fullSync ? null : new Date(Date.now() - 3600000).toISOString()
-    };
+      const baseQuery = `
+        SELECT
+          p.id,
+          p.mls_number,
+          p.mls_provider,
+          p.address,
+          p.details,
+          p.price,
+          p.status,
+          p.property_type,
+          p.description,
+          p.public_remarks,
+          p.marketing,
+          p.updated_at,
+          p.last_synced_at,
+          p.mls_listing_date,
+          COALESCE(
+            (
+              SELECT json_agg(json_build_object(
+                'url', pm.url,
+                'type', pm.media_type,
+                'isPrimary', pm.is_primary,
+                'title', pm.title,
+                'description', pm.description
+              ) ORDER BY pm.is_primary DESC, pm.sort_order ASC)
+              FROM property_media pm
+              WHERE pm.property_id = p.id
+            ), '[]'::json
+          ) AS photos
+        FROM properties p
+        WHERE p.mls_number IS NOT NULL
+        ${fullSync ? '' : "AND p.updated_at >= NOW() - INTERVAL '6 hours'"}
+        ORDER BY p.updated_at DESC
+        LIMIT 1000
+      `;
+
+      const result = await db.query(baseQuery);
+
+      const properties = result.rows.map((row) => {
+        const address = row.address || {};
+        const details = row.details || {};
+        const marketing = row.marketing || {};
+
+        const formatted = {
+          mlsNumber: row.mls_number,
+          mlsProvider: row.mls_provider || null,
+          address: address.street || address.full || '',
+          street: address.street || null,
+          city: address.city || null,
+          state: address.state || null,
+          zipCode: address.zip_code || null,
+          latitude: address.latitude || null,
+          longitude: address.longitude || null,
+          price: row.price ? Number(row.price) : 0,
+          status: row.status || 'active',
+          propertyType: row.property_type || 'unknown',
+          bedrooms: details.bedrooms ?? null,
+          bathrooms: details.bathrooms ?? null,
+          halfBathrooms: details.half_bathrooms ?? null,
+          squareFeet: details.square_feet ?? null,
+          lotSize: details.lot_size ?? null,
+          yearBuilt: details.year_built ?? null,
+          description: row.description || row.public_remarks || '',
+          listingAgent: marketing.listing_agent || marketing.agent || null,
+          listingOffice: marketing.listing_office || null,
+          photos: Array.isArray(row.photos) ? row.photos : [],
+          lastUpdated: row.updated_at ? row.updated_at.toISOString() : null,
+          lastSyncedAt: row.last_synced_at ? row.last_synced_at.toISOString() : null,
+          listingDate: row.mls_listing_date ? row.mls_listing_date.toISOString() : null,
+        };
+
+        return formatted;
+      });
+
+      const lastUpdated = properties.reduce((latest, property) => {
+        if (!property.lastUpdated) return latest;
+        const timestamp = new Date(property.lastUpdated).getTime();
+        return timestamp > latest ? timestamp : latest;
+      }, 0);
+
+      return {
+        properties,
+        lastSyncTimestamp: lastUpdated ? new Date(lastUpdated).toISOString() : null,
+      };
+    } catch (error) {
+      logger.error('Failed to fetch MLS data from database', {
+        error: error.message,
+        stack: error.stack,
+      });
+      throw new Error(`Failed to fetch MLS data: ${error.message}`);
+    }
   }
 
   /**

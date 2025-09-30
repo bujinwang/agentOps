@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const LeadScoreService = require('../services/LeadScoreService');
 const { authenticate } = require('../middleware/auth');
-const { sendResponse, sendError } = require('../utils/responseHelper');
+const { sendResponse, sendError } = require('../utils/responseFormatter');
 
 /**
  * @swagger

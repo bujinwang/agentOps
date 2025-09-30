@@ -17,6 +17,7 @@ class SearchService {
    * @returns {Promise<Object>} Search results
    */
   async searchLeads(userId, filters = {}) {
+    const startTime = Date.now();
     try {
       const {
         query = '',
@@ -110,6 +111,14 @@ class SearchService {
         lastContactedAt: lead.last_contacted_at
       }));
 
+      // Log the search execution
+      const executionTime = Date.now() - startTime;
+      await this.logSearchExecution(userId, {
+        type: 'leads',
+        query,
+        filters: { status, priority, source, limit, offset }
+      }, formattedLeads.length, executionTime);
+
       logger.info(`Lead search completed`, {
         userId,
         query,
@@ -142,6 +151,7 @@ class SearchService {
    * @returns {Promise<Object>} Search results
    */
   async searchTasks(userId, filters = {}) {
+    const startTime = Date.now();
     try {
       const {
         query = '',
@@ -230,6 +240,14 @@ class SearchService {
         updatedAt: task.updated_at
       }));
 
+      // Log the search execution
+      const executionTime = Date.now() - startTime;
+      await this.logSearchExecution(userId, {
+        type: 'tasks',
+        query,
+        filters: { completed, priority, leadId, limit, offset }
+      }, formattedTasks.length, executionTime);
+
       logger.info(`Task search completed`, {
         userId,
         query,
@@ -262,11 +280,22 @@ class SearchService {
    * @returns {Promise<Object>} Combined search results
    */
   async unifiedSearch(userId, filters = {}) {
+    const startTime = Date.now();
     try {
       const [leadsResult, tasksResult] = await Promise.all([
         this.searchLeads(userId, filters),
         this.searchTasks(userId, filters)
       ]);
+
+      const totalResults = leadsResult.count + tasksResult.count;
+      const executionTime = Date.now() - startTime;
+
+      // Log the unified search execution
+      await this.logSearchExecution(userId, {
+        type: 'unified',
+        query: filters.query || '',
+        filters: { limit: filters.limit, offset: filters.offset }
+      }, totalResults, executionTime);
 
       return {
         success: true,
@@ -277,7 +306,7 @@ class SearchService {
         summary: {
           leadsCount: leadsResult.count,
           tasksCount: tasksResult.count,
-          totalCount: leadsResult.count + tasksResult.count
+          totalCount: totalResults
         }
       };
 
@@ -288,6 +317,26 @@ class SearchService {
         error: error.message
       });
       throw new Error(`Unified search failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Log search execution for analytics
+   * @param {number} userId - User performing the search
+   * @param {Object} searchQuery - The search query object
+   * @param {number} resultCount - Number of results returned
+   * @param {number} executionTime - Time taken to execute search in milliseconds
+   */
+  async logSearchExecution(userId, searchQuery, resultCount, executionTime) {
+    try {
+      await this.db.query('SELECT log_search_execution($1, $2, $3, $4)',
+        [userId, JSON.stringify(searchQuery), resultCount, executionTime]);
+    } catch (error) {
+      // Log the error but don't fail the search
+      logger.warn('Failed to log search execution', {
+        userId,
+        error: error.message
+      });
     }
   }
 }

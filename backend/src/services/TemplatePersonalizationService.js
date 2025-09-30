@@ -103,6 +103,87 @@ class TemplatePersonalizationService {
     }
 
     /**
+     * Get variant definitions for a template (used for A/B testing)
+     */
+    async getTemplateVariants(userId, templateId) {
+        // Ensure the template exists and belongs to the user
+        await this.getTemplate(userId, templateId);
+
+        const formatVariant = (row) => ({
+            variantId: row.variant_id,
+            templateId: row.template_id,
+            name: row.name,
+            subjectTemplate: row.subject_template,
+            contentTemplate: row.content_template,
+            weight: row.weight,
+            isControl: row.is_control,
+            metadata: row.metadata ? JSON.parse(row.metadata) : null,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+        });
+
+        // Attempt to load variants from personalized template variants table first
+        try {
+            const personalizedVariantsQuery = `
+                SELECT variant_id, template_id, name, subject_template, content_template,
+                       weight, is_control, metadata, created_at, updated_at
+                FROM personalized_template_variants
+                WHERE template_id = $1
+                ORDER BY is_control DESC, weight DESC, name
+            `;
+
+            const result = await pool.query(personalizedVariantsQuery, [templateId]);
+            if (result.rows.length > 0) {
+                return result.rows.map(formatVariant);
+            }
+        } catch (error) {
+            // 42P01: undefined_table – ignore and fall back to legacy sources
+            if (error.code !== '42P01') {
+                throw error;
+            }
+        }
+
+        // Fall back to variants defined via communication template A/B tests (if available)
+        try {
+            const abTestVariantsQuery = `
+                SELECT
+                    v.id AS variant_id,
+                    t.template_id,
+                    v.name,
+                    v.subject AS subject_template,
+                    v.content AS content_template,
+                    v.weight,
+                    v.is_control,
+                    NULL::jsonb AS metadata,
+                    v.created_at,
+                    v.updated_at
+                FROM ab_test_variants v
+                INNER JOIN ab_tests t ON v.test_id = t.id
+                WHERE t.template_id::text = $1::text
+                ORDER BY v.is_control DESC, v.weight DESC, v.name
+            `;
+
+            // personalized_templates.template_id is numeric, but ab_tests references UUIDs. If the
+            // personalized template has an external reference stored in metadata, use it; otherwise skip.
+            const template = await this.getTemplate(userId, templateId);
+            const externalTemplateId = template?.metadata?.communicationTemplateId || template?.metadata?.templateUuid;
+
+            if (!externalTemplateId) {
+                return [];
+            }
+
+            const result = await pool.query(abTestVariantsQuery, [externalTemplateId]);
+            return result.rows.map(formatVariant);
+        } catch (error) {
+            if (error.code === '42P01') {
+                // ab testing tables not present; treat as no variants
+                return [];
+            }
+            throw error;
+        }
+    }
+
+    /**
      * Update a template
      */
     async updateTemplate(userId, templateId, updates) {
@@ -356,6 +437,7 @@ class TemplatePersonalizationService {
             contentTemplate: row.content_template,
             variables: JSON.parse(row.variables || '{}'),
             conditions: JSON.parse(row.conditions || '{}'),
+            metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
             isActive: row.is_active,
             createdAt: row.created_at,
             updatedAt: row.updated_at

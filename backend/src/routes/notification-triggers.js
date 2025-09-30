@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const NotificationScheduler = require('../services/NotificationScheduler');
-const { sendResponse, sendError } = require('../utils/responseHelper');
+const { authenticateToken, requireRole } = require('../middleware/auth');
+const { sendResponse, sendError } = require('../utils/responseFormatter');
 
 /**
  * @swagger
@@ -228,13 +229,8 @@ router.post('/trigger/task-completed', async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/500'
  */
-router.get('/scheduler/status', async (req, res) => {
+router.get('/scheduler/status', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    // TODO: Add admin authentication check
-    // if (!req.user || req.user.role !== 'admin') {
-    //   return sendError(res, 'Admin access required', 403);
-    // }
-
     const status = NotificationScheduler.getStatus();
 
     sendResponse(res, status, 'Scheduler status retrieved successfully');
@@ -293,13 +289,8 @@ router.get('/scheduler/status', async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/500'
  */
-router.post('/scheduler/start', async (req, res) => {
+router.post('/scheduler/start', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    // TODO: Add admin authentication check
-    // if (!req.user || req.user.role !== 'admin') {
-    //   return sendError(res, 'Admin access required', 403);
-    // }
-
     NotificationScheduler.start();
 
     sendResponse(res, { status: 'started' }, 'Notification scheduler started successfully');
@@ -357,13 +348,8 @@ router.post('/scheduler/start', async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/500'
  */
-router.post('/scheduler/stop', async (req, res) => {
+router.post('/scheduler/stop', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    // TODO: Add admin authentication check
-    // if (!req.user || req.user.role !== 'admin') {
-    //   return sendError(res, 'Admin access required', 403);
-    // }
-
     NotificationScheduler.stop();
 
     sendResponse(res, { status: 'stopped' }, 'Notification scheduler stopped successfully');
@@ -430,13 +416,8 @@ router.post('/scheduler/stop', async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/500'
  */
-router.post('/scheduler/test', async (req, res) => {
+router.post('/scheduler/test', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    // TODO: Add admin authentication check
-    // if (!req.user || req.user.role !== 'admin') {
-    //   return sendError(res, 'Admin access required', 403);
-    // }
-
     // Trigger daily reminders manually
     await NotificationScheduler.sendDailyReminders();
 

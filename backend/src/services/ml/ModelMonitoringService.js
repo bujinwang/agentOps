@@ -433,9 +433,25 @@ class ModelMonitoringService {
 
   async checkErrorRate() {
     try {
-      // This would need to be implemented based on error logging
-      // For now, return a placeholder
-      return 0.05; // 5% error rate (placeholder)
+      const query = `
+        SELECT
+          COALESCE(SUM(error_count), 0) AS errors,
+          COALESCE(SUM(total_predictions), 0) AS total
+        FROM model_usage_stats
+        WHERE date >= CURRENT_DATE - INTERVAL '7 days'
+      `;
+
+      const result = await this.pool.query(query);
+      const row = result.rows[0] || { errors: 0, total: 0 };
+
+      const errors = Number(row.errors) || 0;
+      const total = Number(row.total) || 0;
+
+      if (total === 0) {
+        return 0;
+      }
+
+      return errors / total;
     } catch (error) {
       console.error('Failed to check error rate:', error);
       return 1.0; // High error rate indicates issue
@@ -444,9 +460,22 @@ class ModelMonitoringService {
 
   async checkResponseTime() {
     try {
-      // This would need to be implemented with actual timing measurements
-      // For now, return a placeholder
-      return 1500; // 1.5 seconds average response time (placeholder)
+      const query = `
+        SELECT
+          AVG(response_time_avg) AS avg_response_time
+        FROM model_usage_stats
+        WHERE date >= CURRENT_DATE - INTERVAL '7 days'
+          AND response_time_avg IS NOT NULL
+      `;
+
+      const result = await this.pool.query(query);
+      const avgResponse = result.rows[0]?.avg_response_time;
+
+      if (!avgResponse) {
+        return 0;
+      }
+
+      return Number(avgResponse);
     } catch (error) {
       console.error('Failed to check response time:', error);
       return 10000; // Very slow response indicates issue

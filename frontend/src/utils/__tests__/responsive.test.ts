@@ -1,5 +1,26 @@
-import { Dimensions } from 'react-native';
-import {
+// Mock Dimensions
+const mockDimensions = {
+  get: jest.fn(),
+  addEventListener: jest.fn(),
+  removeEventListener: jest.fn(),
+};
+
+mockDimensions.get.mockReturnValue({
+  width: 375,
+  height: 667,
+  scale: 2,
+  fontScale: 1,
+});
+
+jest.mock('react-native', () => ({
+  Dimensions: mockDimensions,
+  Platform: {
+    OS: 'ios',
+    select: jest.fn(),
+  },
+}));
+
+const {
   Breakpoints,
   getDeviceType,
   getOrientation,
@@ -10,22 +31,7 @@ import {
   isDesktop,
   isPortrait,
   isLandscape,
-} from '../responsive';
-
-// Mock Dimensions
-const mockDimensions = {
-  get: jest.fn(),
-  addEventListener: jest.fn(),
-  removeEventListener: jest.fn(),
-};
-
-jest.mock('react-native', () => ({
-  Dimensions: mockDimensions,
-  Platform: {
-    OS: 'ios',
-    select: jest.fn(),
-  },
-}));
+} = require('../responsive');
 
 describe('Responsive Utilities', () => {
   beforeEach(() => {
@@ -153,7 +159,7 @@ describe('Responsive Utilities', () => {
 
     it('should scale values correctly', () => {
       responsiveDimensions.updateDimensions({ width: 375, height: 667 });
-      expect(responsiveDimensions.scaleValue(100)).toBe(100); // 375/320 = 1.17, but capped at 2
+      expect(responsiveDimensions.scaleValue(100)).toBe(117); // ~1.17x scaling
 
       responsiveDimensions.updateDimensions({ width: 768, height: 1024 });
       expect(responsiveDimensions.scaleValue(100)).toBe(200); // 768/320 = 2.4, capped at 2
@@ -172,16 +178,40 @@ describe('Responsive Utilities', () => {
       responsiveDimensions.updateDimensions({ width: 1024, height: 768 });
       expect(responsiveDimensions.getResponsiveFontSize(16)).toBe(18);
     });
+
+    it('should calculate grid columns based on device type', () => {
+      responsiveDimensions.updateDimensions({ width: 360, height: 640 });
+      expect(responsiveDimensions.getGridColumns({ mobile: 1, tablet: 2, desktop: 3 })).toBe(1);
+
+      responsiveDimensions.updateDimensions({ width: 900, height: 1200 });
+      expect(responsiveDimensions.getGridColumns({ mobile: 1, tablet: 2, desktop: 3 })).toBe(2);
+
+      responsiveDimensions.updateDimensions({ width: 1400, height: 900 });
+      expect(responsiveDimensions.getGridColumns({ mobile: 1, tablet: 2, desktop: 3 })).toBe(3);
+    });
+
+    it('should compute max content width with overrides', () => {
+      responsiveDimensions.updateDimensions({ width: 360, height: 640 });
+      expect(responsiveDimensions.getMaxContentWidth({ mobile: 420 })).toBe(420);
+
+      responsiveDimensions.updateDimensions({ width: 1400, height: 900 });
+      expect(responsiveDimensions.getMaxContentWidth()).toBeGreaterThan(1000);
+    });
+
+    it('should provide responsive padding', () => {
+      responsiveDimensions.updateDimensions({ width: 360, height: 640 });
+      const mobilePadding = responsiveDimensions.getResponsivePadding(16, { mobile: 20 });
+      expect(mobilePadding).toBeGreaterThanOrEqual(20);
+
+      responsiveDimensions.updateDimensions({ width: 1280, height: 900 });
+      const desktopPadding = responsiveDimensions.getResponsivePadding(16, { desktop: 28 });
+      expect(desktopPadding).toBeGreaterThanOrEqual(28);
+    });
   });
 
   describe('Utility Functions', () => {
     beforeEach(() => {
-      mockDimensions.get.mockReturnValue({
-        width: 375,
-        height: 667,
-        scale: 2,
-        fontScale: 1,
-      });
+      responsiveDimensions.updateDimensions({ width: 375, height: 667 });
     });
 
     it('should detect mobile correctly', () => {

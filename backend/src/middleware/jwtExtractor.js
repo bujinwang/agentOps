@@ -53,12 +53,20 @@ const extractUserFromToken = (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Attach user information to request
+    const roles = Array.isArray(decoded.roles)
+      ? decoded.roles.map(role => String(role).toLowerCase())
+      : decoded.role
+        ? [String(decoded.role).toLowerCase()]
+        : [];
+
     req.user = {
       userId: decoded.userId || decoded.id,
       email: decoded.email,
       firstName: decoded.firstName,
       lastName: decoded.lastName,
-      role: decoded.role || 'user'
+      role: roles[0] || 'user',
+      roles,
+      permissions: decoded.permissions || []
     };
 
     // Log successful token extraction (only in debug mode for security)
@@ -121,12 +129,20 @@ const optionalExtractUserFromToken = (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const roles = Array.isArray(decoded.roles)
+      ? decoded.roles.map(role => String(role).toLowerCase())
+      : decoded.role
+        ? [String(decoded.role).toLowerCase()]
+        : [];
+
     req.user = {
       userId: decoded.userId || decoded.id,
       email: decoded.email,
       firstName: decoded.firstName,
       lastName: decoded.lastName,
-      role: decoded.role || 'user'
+      role: roles[0] || 'user',
+      roles,
+      permissions: decoded.permissions || []
     };
 
     next();

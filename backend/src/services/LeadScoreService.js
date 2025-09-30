@@ -1,5 +1,5 @@
 const pool = require('../config/database');
-const { sendResponse, sendError } = require('../utils/responseHelper');
+const { sendResponse, sendError } = require('../utils/responseFormatter');
 
 class LeadScoreService {
   /**

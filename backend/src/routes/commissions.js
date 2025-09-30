@@ -120,19 +120,24 @@ router.get('/', async (req, res) => {
             agentId,
             status
         } = req.query;
+        const requestingUserId = req.user.id || req.user.user_id;
+        const userRole = req.user.role || req.user.user_role || 'agent';
 
-        // This would use the existing revenue service getAgentCommissions method
-        // For now, return a placeholder response
+        const result = await commissionService.getCommissionRecords({
+            page: parseInt(page, 10),
+            limit: parseInt(limit, 10),
+            startDate,
+            endDate,
+            agentId,
+            status,
+            userRole,
+            requestingUserId
+        });
+
         res.json({
             success: true,
-            data: [],
-            pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
-                total: 0,
-                pages: 0
-            },
-            message: 'Commission records endpoint - integration with revenue service pending'
+            data: result.data,
+            pagination: result.pagination
         });
     } catch (error) {
         console.error('Error fetching commission records:', error);
@@ -145,12 +150,24 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        // This would fetch a specific commission record
-        // For now, return a placeholder response
+        const requestingUserId = req.user.id || req.user.user_id;
+        const userRole = req.user.role || req.user.user_role || 'agent';
+
+        const commission = await commissionService.getCommissionById(req.params.id, {
+            userRole,
+            requestingUserId
+        });
+
+        if (!commission) {
+            return res.status(404).json({
+                success: false,
+                error: 'Commission not found'
+            });
+        }
+
         res.json({
             success: true,
-            data: null,
-            message: 'Individual commission record endpoint - implementation pending'
+            data: commission
         });
     } catch (error) {
         console.error('Error fetching commission record:', error);
@@ -189,19 +206,22 @@ router.post('/payments/process', requireRole(['admin', 'manager']), async (req, 
 router.get('/payments', async (req, res) => {
     try {
         const { agentId, status, page = 1, limit = 50 } = req.query;
+        const requestingUserId = req.user.id || req.user.user_id;
+        const userRole = req.user.role || req.user.user_role || 'agent';
 
-        // This would fetch commission payments
-        // For now, return a placeholder response
+        const result = await commissionService.getCommissionPayments({
+            page: parseInt(page, 10),
+            limit: parseInt(limit, 10),
+            agentId,
+            status,
+            userRole,
+            requestingUserId
+        });
+
         res.json({
             success: true,
-            data: [],
-            pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
-                total: 0,
-                pages: 0
-            },
-            message: 'Commission payments endpoint - implementation pending'
+            data: result.data,
+            pagination: result.pagination
         });
     } catch (error) {
         console.error('Error fetching commission payments:', error);
@@ -289,19 +309,21 @@ router.put('/disputes/:id/resolve', requireRole(['admin', 'manager']), async (re
 router.get('/disputes', async (req, res) => {
     try {
         const { status = 'open', page = 1, limit = 50 } = req.query;
+        const requestingUserId = req.user.id || req.user.user_id;
+        const userRole = req.user.role || req.user.user_role || 'agent';
 
-        // This would fetch commission disputes
-        // For now, return a placeholder response
+        const result = await commissionService.getCommissionDisputes({
+            page: parseInt(page, 10),
+            limit: parseInt(limit, 10),
+            status,
+            userRole,
+            requestingUserId
+        });
+
         res.json({
             success: true,
-            data: [],
-            pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
-                total: 0,
-                pages: 0
-            },
-            message: 'Commission disputes endpoint - implementation pending'
+            data: result.data,
+            pagination: result.pagination
         });
     } catch (error) {
         console.error('Error fetching commission disputes:', error);
@@ -441,12 +463,38 @@ router.get('/structures/templates', async (req, res) => {
 router.get('/export/commissions', async (req, res) => {
     try {
         const { format = 'csv', startDate, endDate } = req.query;
+        const requestingUserId = req.user.id || req.user.user_id;
+        const userRole = req.user.role || req.user.user_role || 'agent';
 
-        // This would use the revenue service export functionality
-        // For now, return a placeholder response
+        const records = await commissionService.exportCommissions({
+            startDate,
+            endDate,
+            agentId: req.query.agentId,
+            userRole,
+            requestingUserId
+        });
+
+        if (format.toLowerCase() === 'csv') {
+            const header = 'Commission ID,Agent ID,Gross Amount,Commission Amount,Net Amount,Status,Created At';
+            const lines = records.map(record => [
+                record.id,
+                record.agentId,
+                record.grossAmount,
+                record.commissionAmount,
+                record.netAmount,
+                record.paymentStatus,
+                record.createdAt
+            ].map(value => `"${value ?? ''}"`).join(','));
+
+            const csv = [header, ...lines].join('\n');
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="commissions-export.csv"');
+            return res.status(200).send(csv);
+        }
+
         res.json({
             success: true,
-            message: 'Commission export endpoint - integration with revenue service pending'
+            data: records
         });
     } catch (error) {
         console.error('Error exporting commissions:', error);
@@ -460,12 +508,39 @@ router.get('/export/commissions', async (req, res) => {
 router.get('/export/payments', async (req, res) => {
     try {
         const { format = 'csv', startDate, endDate } = req.query;
+        const requestingUserId = req.user.id || req.user.user_id;
+        const userRole = req.user.role || req.user.user_role || 'agent';
 
-        // This would export commission payment data
-        // For now, return a placeholder response
+        const payments = await commissionService.exportCommissionPayments({
+            startDate,
+            endDate,
+            agentId: req.query.agentId,
+            userRole,
+            requestingUserId
+        });
+
+        if (format.toLowerCase() === 'csv') {
+            const header = 'Payment ID,Agent ID,Payment Date,Period Start,Period End,Total Amount,Amount Paid,Status';
+            const lines = payments.map(payment => [
+                payment.id,
+                payment.agent_id,
+                payment.payment_date,
+                payment.payment_period_start,
+                payment.payment_period_end,
+                payment.total_amount,
+                payment.amount_paid,
+                payment.status
+            ].map(value => `"${value ?? ''}"`).join(','));
+
+            const csv = [header, ...lines].join('\n');
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="commission-payments-export.csv"');
+            return res.status(200).send(csv);
+        }
+
         res.json({
             success: true,
-            message: 'Commission payments export endpoint - implementation pending'
+            data: payments
         });
     } catch (error) {
         console.error('Error exporting commission payments:', error);

@@ -3,14 +3,128 @@ const { getDatabase, executeQuery, executeWithCache } = require('../config/datab
 const CacheService = require('../services/CacheService');
 const bcrypt = require('bcrypt');
 
+const normalizeRoles = (value) => {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .filter(Boolean)
+      .map(role => String(role).toLowerCase());
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    // Attempt to parse as JSON first (array or object)
+    try {
+      const parsed = JSON.parse(trimmed.replace(/'/g, '"'));
+      if (Array.isArray(parsed)) {
+        return parsed.filter(Boolean).map(role => String(role).toLowerCase());
+      }
+      if (parsed && typeof parsed === 'object' && parsed.role) {
+        return [String(parsed.role).toLowerCase()];
+      }
+      if (parsed && typeof parsed === 'object' && parsed.roles && Array.isArray(parsed.roles)) {
+        return parsed.roles.filter(Boolean).map(role => String(role).toLowerCase());
+      }
+    } catch (error) {
+      // Ignore JSON parse errors and continue with fallback logic
+    }
+
+    // Handle Postgres array string format {"admin","manager"}
+    if (trimmed.startsWith('{') && trimmed.endsWith('}') && trimmed.includes(',')) {
+      try {
+        const arrayFormatted = trimmed.replace('{', '[').replace('}', ']').replace(/'/g, '"');
+        const parsed = JSON.parse(arrayFormatted);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(Boolean).map(role => String(role).toLowerCase());
+        }
+      } catch (error) {
+        // Fall through to single role handling
+      }
+    }
+
+    return [trimmed.toLowerCase()];
+  }
+
+  return [];
+};
+
+const extractRolesFromMetadata = (metadata) => {
+  if (!metadata) {
+    return [];
+  }
+
+  try {
+    const meta = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+    if (!meta || typeof meta !== 'object') {
+      return [];
+    }
+
+    if (Array.isArray(meta.roles)) {
+      return meta.roles.filter(Boolean).map(role => String(role).toLowerCase());
+    }
+
+    if (meta.role) {
+      return [String(meta.role).toLowerCase()];
+    }
+  } catch (error) {
+    // Ignore metadata parsing issues and continue with defaults
+  }
+
+  return [];
+};
+
 class User {
   constructor(data) {
+    const metadataRoles = extractRolesFromMetadata(data.metadata);
+
+    const combinedRoles = new Set([
+      ...normalizeRoles(data.roles),
+      ...normalizeRoles(data.user_roles),
+      ...metadataRoles,
+    ]);
+
+    if (data.role) {
+      combinedRoles.add(String(data.role).toLowerCase());
+    }
+
+    if (data.user_role) {
+      combinedRoles.add(String(data.user_role).toLowerCase());
+    }
+
+    const roleList = Array.from(combinedRoles);
+    const primaryRole = roleList[0] || (data.role ? String(data.role).toLowerCase() : null) || (data.user_role ? String(data.user_role).toLowerCase() : null) || null;
+
     this.user_id = data.user_id;
+    this.id = data.user_id; // Alias for convenience in middleware/routes
     this.email = data.email;
     this.first_name = data.first_name;
     this.last_name = data.last_name;
     this.created_at = data.created_at;
     this.updated_at = data.updated_at;
+    this.role = primaryRole;
+    this.user_role = primaryRole;
+    this.roles = roleList.length > 0 ? roleList : (primaryRole ? [primaryRole] : []);
+
+    if (data.permissions) {
+      if (Array.isArray(data.permissions)) {
+        this.permissions = data.permissions;
+      } else if (typeof data.permissions === 'string') {
+        try {
+          const parsed = JSON.parse(data.permissions);
+          this.permissions = Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+          this.permissions = [];
+        }
+      } else {
+        this.permissions = [];
+      }
+    } else {
+      this.permissions = [];
+    }
   }
 
   // Create a new user with race condition protection
@@ -41,7 +155,7 @@ class User {
       const insertQuery = `
         INSERT INTO users (email, password_hash, first_name, last_name, created_at, updated_at)
         VALUES ($1, $2, $3, $4, NOW(), NOW())
-        RETURNING user_id, email, first_name, last_name, created_at, updated_at
+        RETURNING *
       `;
 
       const values = [email, passwordHash, firstName, lastName];
@@ -53,7 +167,8 @@ class User {
       }
 
       await client.query('COMMIT');
-      return new User(result.rows[0]);
+      const { password_hash: _, ...userDataWithoutPassword } = result.rows[0];
+      return new User(userDataWithoutPassword);
 
     } catch (error) {
       await client.query('ROLLBACK');
@@ -80,7 +195,7 @@ class User {
       }
 
       const query = `
-        SELECT user_id, email, password_hash, first_name, last_name, created_at, updated_at
+        SELECT *
         FROM users
         WHERE LOWER(email) = LOWER($1)
         LIMIT 1
@@ -99,9 +214,11 @@ class User {
         throw new Error('User data integrity issue');
       }
 
+      const { password_hash: passwordHash, ...userWithoutPassword } = userData;
+
       return {
-        user: new User(userData),
-        passwordHash: userData.password_hash
+        user: new User(userWithoutPassword),
+        passwordHash
       };
     } catch (error) {
       // Log the error but don't expose internal details
@@ -114,19 +231,21 @@ class User {
   static async findById(userId) {
     const db = getDatabase();
     const query = `
-      SELECT user_id, email, first_name, last_name, created_at, updated_at
+      SELECT *
       FROM users
       WHERE user_id = $1
       LIMIT 1
     `;
 
     const result = await db.query(query, [userId]);
-    
+
     if (result.rows.length === 0) {
       return null;
     }
 
-    return new User(result.rows[0]);
+    const { password_hash: _, ...userWithoutPassword } = result.rows[0];
+
+    return new User(userWithoutPassword);
   }
 
   // Check if email exists with improved error handling
@@ -353,9 +472,13 @@ class User {
   toJSON() {
     return {
       user_id: this.user_id,
+      id: this.user_id,
       email: this.email,
       first_name: this.first_name,
       last_name: this.last_name,
+      role: this.role,
+      roles: this.roles,
+      permissions: this.permissions,
       created_at: this.created_at,
       updated_at: this.updated_at
     };

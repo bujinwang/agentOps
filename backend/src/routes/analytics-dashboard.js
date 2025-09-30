@@ -181,7 +181,7 @@ router.get('/summary', async (req, res) => {
 router.get('/export', async (req, res) => {
   try {
     const userId = req.user.userId;
-    const format = req.query.format || 'json';
+    const format = (req.query.format || 'json').toString().toLowerCase();
     const timeframe = req.query.timeframe || 'month';
 
     logger.info('Export analytics request', {
@@ -190,28 +190,76 @@ router.get('/export', async (req, res) => {
       timeframe
     });
 
-    // Get comprehensive report
     const result = await AnalyticsService.getAnalyticsReport(userId, {
       timeframe,
       includeRecentActivity: true
     });
 
-    if (result.success) {
-      // For now, return JSON - could be extended to support CSV, PDF, etc.
-      const exportData = {
-        metadata: {
-          userId,
-          timeframe,
-          format,
-          exportedAt: new Date().toISOString()
-        },
-        data: result.report
+    if (!result.success) {
+      return sendError(res, 'Failed to export analytics data', 'EXPORT_ERROR', null, 500);
+    }
+
+    const report = result.report;
+    const exportedAt = new Date().toISOString();
+
+    if (format === 'csv') {
+      const lines = [];
+      const push = (section, metric, value) => {
+        lines.push(`"${section}","${metric}","${String(value).replace(/"/g, '""')}"`);
       };
 
-      sendResponse(res, exportData, 'Analytics data exported successfully');
-    } else {
-      sendError(res, 'Failed to export analytics data', 'EXPORT_ERROR', null, 500);
+      push('Summary', 'Timeframe', report.timeframe);
+      push('Summary', 'Generated At', report.generatedAt);
+      push('Summary', 'Total Leads', report.dashboard.totalLeads);
+      push('Summary', 'Conversion Rate (%)', report.dashboard.conversionRate);
+      push('Summary', 'Active Tasks', report.dashboard.activeTasks);
+
+      report.leadStats.leadsByStatus.forEach((item) =>
+        push('Lead Status', item.status, item.count)
+      );
+
+      report.leadStats.leadsBySource.forEach((item) =>
+        push('Lead Source', item.source, item.count)
+      );
+
+      report.leadStats.leadsByPriority.forEach((item) =>
+        push('Lead Priority', item.priority, item.count)
+      );
+
+      report.leadStats.leadsOverTime.forEach((item) =>
+        push('Lead Timeline', item.date, item.count)
+      );
+
+      if (report.recentActivity?.length) {
+        report.recentActivity.forEach((activity) =>
+          push('Recent Activity', activity.type, activity.interaction_date || activity.created_at)
+        );
+      }
+
+      const header = 'Section,Metric,Value';
+      const csv = [header, ...lines].join('\n');
+      const filename = `analytics-${timeframe}-${exportedAt.split('T')[0]}.csv`;
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.status(200).send(csv);
     }
+
+    if (format !== 'json') {
+      return sendError(res, `Unsupported export format: ${format}`, 'EXPORT_INVALID_FORMAT', null, 400);
+    }
+
+    const exportData = {
+      metadata: {
+        userId,
+        timeframe,
+        format,
+        exportedAt
+      },
+      data: report
+    };
+
+    sendResponse(res, exportData, 'Analytics data exported successfully');
 
   } catch (error) {
     logger.error('Export analytics error', {

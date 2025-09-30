@@ -8,6 +8,14 @@ const RedisStore = require('rate-limit-redis');
 const { redisClient } = require('./redis');
 const { logger } = require('./logger');
 
+const sanitizeOptionsForTests = (options = {}) => {
+  if (process.env.NODE_ENV === 'test') {
+    const { onLimitReached, ...rest } = options;
+    return rest;
+  }
+  return options;
+};
+
 // Different rate limiting strategies for different endpoints
 const RATE_LIMIT_STRATEGIES = {
   // General API endpoints
@@ -81,7 +89,7 @@ const createRateLimiter = (strategy, keyPrefix = 'rate_limit') => {
     }
   };
 
-  return rateLimit(config);
+  return rateLimit(sanitizeOptionsForTests(config));
 };
 
 // Specific rate limiters for different endpoints
