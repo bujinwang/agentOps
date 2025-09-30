@@ -169,6 +169,26 @@ export const CompactCardSkeleton: React.FC<Omit<SkeletonCardProps, 'height'>> = 
   <SkeletonCard {...props} height={80} />
 );
 
+export const LeadDetailSkeleton: React.FC<Omit<SkeletonCardProps, 'height' | 'width'>> = (props) => (
+  <View style={styles.detailSkeletonContainer}>
+    {[180, 140, 200].map((height, index) => (
+      <View key={`lead-detail-skeleton-${index}`} style={styles.detailSkeletonBlock}>
+        <SkeletonCard {...props} height={height} />
+      </View>
+    ))}
+  </View>
+);
+
+export const TaskDetailSkeleton: React.FC<Omit<SkeletonCardProps, 'height' | 'width'>> = (props) => (
+  <View style={styles.detailSkeletonContainer}>
+    {[160, 120, 140].map((height, index) => (
+      <View key={`task-detail-skeleton-${index}`} style={styles.detailSkeletonBlock}>
+        <SkeletonCard {...props} height={height} />
+      </View>
+    ))}
+  </View>
+);
+
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
@@ -224,6 +244,12 @@ const styles = StyleSheet.create({
   dateLine: {
     height: 12,
     width: 80,
+  },
+  detailSkeletonContainer: {
+    width: '100%',
+  },
+  detailSkeletonBlock: {
+    marginBottom: MaterialSpacing.sm,
   },
 });
 

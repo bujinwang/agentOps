@@ -32,6 +32,18 @@ export class ResponsiveDimensions {
   private static instance: ResponsiveDimensions;
   private dimensions = Dimensions.get('window');
 
+  private readonly defaultGridConfig = {
+    mobile: 1,
+    tablet: 2,
+    desktop: 3,
+  } as const;
+
+  private readonly defaultContentWidths = {
+    mobile: 480,
+    tablet: 720,
+    desktop: 1120,
+  } as const;
+
   static getInstance(): ResponsiveDimensions {
     if (!ResponsiveDimensions.instance) {
       ResponsiveDimensions.instance = new ResponsiveDimensions();
@@ -135,6 +147,27 @@ export class ResponsiveDimensions {
   // Get responsive spacing
   getResponsiveSpacing(baseSpacing: number): number {
     return this.scaleValue(baseSpacing);
+  }
+
+  // Determine grid column count based on device type and overrides
+  getGridColumns(config: Partial<Record<'mobile' | 'tablet' | 'desktop', number>> & { default?: number } = {}): number {
+    const deviceType = this.getDeviceType();
+    const fallback = config.default ?? this.defaultGridConfig[deviceType];
+    return config[deviceType] ?? fallback ?? 1;
+  }
+
+  // Determine max content width for constrained layouts
+  getMaxContentWidth(overrides: Partial<Record<'mobile' | 'tablet' | 'desktop', number>> = {}): number {
+    const deviceType = this.getDeviceType();
+    const baseWidth = this.defaultContentWidths[deviceType];
+    return overrides[deviceType] ?? baseWidth;
+  }
+
+  // Convenience to derive responsive padding with optional overrides
+  getResponsivePadding(basePadding: number, overrides: Partial<Record<'mobile' | 'tablet' | 'desktop', number>> = {}): number {
+    const deviceType = this.getDeviceType();
+    const target = overrides[deviceType] ?? basePadding;
+    return this.scaleValue(target);
   }
 }
 

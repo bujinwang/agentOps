@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Dimensions,
   ActivityIndicator,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { apiService } from '../../services/api';
@@ -106,9 +107,23 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
     storedItems: number;
     totalSize: number;
   } | null>(null);
+  const [httpDashboardStats, setHttpDashboardStats] = useState<DashboardStats | null>(null);
+  const [httpLeadStats, setHttpLeadStats] = useState<LeadStats | null>(null);
+  const [httpConversionFunnel, setHttpConversionFunnel] = useState<ConversionStage[]>([]);
+  const [httpConversionMetrics, setHttpConversionMetrics] = useState<ConversionMetrics | null>(null);
 
   // Extract data from WebSocket hook
   const { dashboardStats, leadStats, conversionFunnel, conversionMetrics, isConnected, lastUpdate } = analyticsData;
+
+  const resolvedDashboardStats = useMemo(() => dashboardStats || httpDashboardStats || null, [dashboardStats, httpDashboardStats]);
+  const resolvedLeadStats = useMemo(() => leadStats || httpLeadStats || null, [leadStats, httpLeadStats]);
+  const resolvedConversionFunnel = useMemo(() => {
+    if (conversionFunnel && conversionFunnel.length > 0) {
+      return conversionFunnel;
+    }
+    return httpConversionFunnel;
+  }, [conversionFunnel, httpConversionFunnel]);
+  const resolvedConversionMetrics = useMemo(() => conversionMetrics || httpConversionMetrics || null, [conversionMetrics, httpConversionMetrics]);
 
   const screenWidth = Dimensions.get('window').width;
 
@@ -189,6 +204,22 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
         apiService.getConversionFunnel(),
         apiService.getConversionMetrics(dateRange),
       ]);
+
+      if (dashboardResponse?.data) {
+        setHttpDashboardStats(dashboardResponse.data);
+      }
+
+      if (leadStatsResponse?.data) {
+        setHttpLeadStats(leadStatsResponse.data);
+      }
+
+      if (Array.isArray(conversionResponse?.data)) {
+        setHttpConversionFunnel(conversionResponse.data as ConversionStage[]);
+      }
+
+      if (metricsResponse?.data) {
+        setHttpConversionMetrics(metricsResponse.data as unknown as ConversionMetrics);
+      }
 
       console.log('Analytics data loaded successfully');
       initialLoadingState.stopLoading();
@@ -432,47 +463,47 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
   };
 
   const renderKPIcards = () => {
-    if (!dashboardStats) return null;
+    if (!resolvedDashboardStats) return null;
 
     const baseKpiData = [
       {
         title: 'Total Leads',
-        value: dashboardStats.totalLeads,
+        value: resolvedDashboardStats.totalLeads,
         subtitle: 'All time',
         color: MaterialColors.primary[500],
         trend: 'up' as const
       },
       {
         title: 'New Leads',
-        value: dashboardStats.newLeads,
+        value: resolvedDashboardStats.newLeads,
         subtitle: 'This period',
         color: MaterialColors.secondary[500],
         trend: 'up' as const
       },
       {
         title: 'Active Tasks',
-        value: dashboardStats.activeTasks,
+        value: resolvedDashboardStats.activeTasks,
         subtitle: 'Pending',
         color: MaterialColors.warning[500],
         trend: 'down' as const
       },
       {
         title: 'Conversion Rate',
-        value: `${dashboardStats.conversionRate.toFixed(1)}%`,
+        value: `${resolvedDashboardStats.conversionRate.toFixed(1)}%`,
         subtitle: 'Lead to client',
-        color: dashboardStats.conversionRate > 15 ? MaterialColors.secondary[500] : MaterialColors.error[500],
-        trend: dashboardStats.conversionRate > 10 ? 'up' as const : 'down' as const
+        color: resolvedDashboardStats.conversionRate > 15 ? MaterialColors.secondary[500] : MaterialColors.error[500],
+        trend: resolvedDashboardStats.conversionRate > 10 ? 'up' as const : 'down' as const
       },
       {
         title: 'Leads This Month',
-        value: dashboardStats.leadsThisMonth,
+        value: resolvedDashboardStats.leadsThisMonth,
         subtitle: 'This month',
         color: MaterialColors.primary[300],
         trend: 'up' as const
       },
       {
         title: 'Completed Tasks',
-        value: dashboardStats.completedTasks,
+        value: resolvedDashboardStats.completedTasks,
         subtitle: 'This period',
         color: MaterialColors.secondary[300],
         trend: 'up' as const
@@ -481,37 +512,37 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
 
     // Add conversion-specific KPIs if data is available
     const conversionKpiData = [];
-    if (conversionMetrics) {
+    if (resolvedConversionMetrics) {
       conversionKpiData.push(
         {
           title: 'Pipeline Value',
-          value: formatCurrency(conversionMetrics.pipeline_value || 0),
+          value: formatCurrency(resolvedConversionMetrics.pipeline_value || 0),
           subtitle: 'Total opportunity value',
           color: MaterialColors.secondary[600],
           trend: 'up' as const
         },
         {
           title: 'Avg Deal Size',
-          value: formatCurrency(conversionMetrics.average_deal_size || 0),
+          value: formatCurrency(resolvedConversionMetrics.average_deal_size || 0),
           subtitle: 'Won deals average',
           color: MaterialColors.primary[600],
           trend: 'up' as const
         },
         {
           title: 'Win Rate',
-          value: conversionMetrics.total_leads > 0
-            ? `${((conversionMetrics.leads_won / Math.max(conversionMetrics.leads_won + conversionMetrics.leads_lost, 1)) * 100).toFixed(1)}%`
+          value: resolvedConversionMetrics.total_leads > 0
+            ? `${((resolvedConversionMetrics.leads_won / Math.max(resolvedConversionMetrics.leads_won + resolvedConversionMetrics.leads_lost, 1)) * 100).toFixed(1)}%`
             : '0.0%',
           subtitle: 'Deals won vs lost',
-          color: (conversionMetrics.leads_won / Math.max(conversionMetrics.leads_won + conversionMetrics.leads_lost, 1)) > 0.2
+          color: (resolvedConversionMetrics.leads_won / Math.max(resolvedConversionMetrics.leads_won + resolvedConversionMetrics.leads_lost, 1)) > 0.2
             ? MaterialColors.secondary[500]
             : MaterialColors.warning[500],
           trend: 'up' as const
         },
         {
           title: 'Conversion Velocity',
-          value: conversionMetrics.average_conversion_time > 0
-            ? `${Math.round(conversionMetrics.average_conversion_time)} days`
+          value: resolvedConversionMetrics.average_conversion_time > 0
+            ? `${Math.round(resolvedConversionMetrics.average_conversion_time)} days`
             : 'N/A',
           subtitle: 'Avg time to convert',
           color: MaterialColors.neutral[600],
@@ -540,16 +571,16 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
   };
 
   const renderLeadStatusChart = () => {
-    if (!leadStats?.leadsByStatus) return null;
+    if (!resolvedLeadStats?.leadsByStatus) return null;
 
-    const chartData = leadStats.leadsByStatus.map(item => ({
+    const chartData = resolvedLeadStats.leadsByStatus.map(item => ({
       label: item.status,
       value: item.count,
       color: getStatusColor(item.status),
       details: {
         count: item.count,
-        percentage: leadStats.leadsByStatus.reduce((sum, s) => sum + s.count, 0) > 0
-          ? (item.count / leadStats.leadsByStatus.reduce((sum, s) => sum + s.count, 0)) * 100
+        percentage: resolvedLeadStats.leadsByStatus.reduce((sum, s) => sum + s.count, 0) > 0
+          ? (item.count / resolvedLeadStats.leadsByStatus.reduce((sum, s) => sum + s.count, 0)) * 100
           : 0,
         trend: Math.random() * 20 - 10, // Mock trend data - replace with real data
         subItems: [
@@ -561,8 +592,10 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
     }));
 
     const handleStatusPress = (segment: any) => {
-      console.log('Status segment pressed:', segment);
-      // TODO: Navigate to detailed lead list filtered by status
+      Alert.alert(
+        'Lead Status Insight',
+        `${segment.label}: ${segment.details.count} leads (${segment.details.percentage.toFixed(1)}%)`
+      );
     };
 
     return (
@@ -579,16 +612,16 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
   };
 
   const renderLeadSourceChart = () => {
-    if (!leadStats?.leadsBySource) return null;
+    if (!resolvedLeadStats?.leadsBySource) return null;
 
-    const chartData = leadStats.leadsBySource.map(item => ({
+    const chartData = resolvedLeadStats.leadsBySource.map(item => ({
       label: item.source,
       value: item.count,
       color: getSourceColor(item.source),
       details: {
         count: item.count,
-        percentage: leadStats.leadsBySource.reduce((sum, s) => sum + s.count, 0) > 0
-          ? (item.count / leadStats.leadsBySource.reduce((sum, s) => sum + s.count, 0)) * 100
+        percentage: resolvedLeadStats.leadsBySource.reduce((sum, s) => sum + s.count, 0) > 0
+          ? (item.count / resolvedLeadStats.leadsBySource.reduce((sum, s) => sum + s.count, 0)) * 100
           : 0,
         trend: Math.random() * 30 - 15, // Mock trend data - replace with real data
         subItems: [
@@ -599,8 +632,10 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
     }));
 
     const handleSourcePress = (segment: any) => {
-      console.log('Source segment pressed:', segment);
-      // TODO: Navigate to detailed lead list filtered by source
+      Alert.alert(
+        'Lead Source Insight',
+        `${segment.label}: ${segment.details.count} leads (${segment.details.percentage.toFixed(1)}%)`
+      );
     };
 
     return (
@@ -617,17 +652,19 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
   };
 
   const renderConversionFunnel = () => {
-    if (!conversionFunnel || conversionFunnel.length === 0) return null;
+    const funnelData = resolvedConversionFunnel;
+    if (!funnelData || funnelData.length === 0) return null;
 
     const handleStagePress = (stage: ConversionStage) => {
-      // Navigate to detailed view or show modal with stage details
-      console.log('Stage pressed:', stage);
-      // TODO: Implement drill-down navigation
+      Alert.alert(
+        'Conversion Stage Details',
+        `${stage.stage_name || stage.stage} \nLeads: ${stage.lead_count} \nAvg Probability: ${Math.round((stage.avg_probability || 0) * 100)}%`
+      );
     };
 
     return (
       <ConversionFunnel
-        data={conversionFunnel}
+        data={funnelData}
         onStagePress={handleStagePress}
         showValues={true}
         showProbabilities={true}
@@ -664,7 +701,7 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
     return colors[source as keyof typeof colors] || MaterialColors.neutral[500];
   };
 
-  if (initialLoadingState.isLoading && !dashboardStats) {
+  if (initialLoadingState.isLoading && !resolvedDashboardStats) {
     return (
       <SafeAreaView style={styles.container}>
         {/* Header skeleton */}
@@ -789,12 +826,22 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ navigation }) => {
         {renderComparisonChart()}
 
         {/* Conversion Metrics Card */}
-        {conversionMetrics && (
+        {resolvedConversionMetrics && (
           <ConversionMetricsCard
-            metrics={conversionMetrics}
+            metrics={resolvedConversionMetrics}
             onPress={() => {
-              // TODO: Navigate to detailed conversion analytics
-              console.log('Navigate to detailed conversion analytics');
+              const details = [
+                `Pipeline Value: ${formatCurrency(resolvedConversionMetrics.pipeline_value || 0)}`,
+                `Average Deal Size: ${formatCurrency(resolvedConversionMetrics.average_deal_size || 0)}`,
+                `Win Rate: ${resolvedConversionMetrics.total_leads > 0
+                  ? `${((resolvedConversionMetrics.leads_won / Math.max(resolvedConversionMetrics.leads_won + resolvedConversionMetrics.leads_lost, 1)) * 100).toFixed(1)}%`
+                  : '0.0%'}`,
+                `Average Conversion Time: ${resolvedConversionMetrics.average_conversion_time > 0
+                  ? `${Math.round(resolvedConversionMetrics.average_conversion_time)} days`
+                  : 'Not available'}`
+              ].join('\n');
+
+              Alert.alert('Conversion Insights', details);
             }}
             showDetails={true}
           />

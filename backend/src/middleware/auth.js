@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
 const { ERROR_MESSAGES, JWT_CONFIG } = require('../config/constants');
+const { userHasRole } = require('../utils/accessControl');
 
 // In-memory token blacklist (in production, use Redis or database)
 const tokenBlacklist = new Set();
@@ -48,9 +49,32 @@ const checkRateLimit = (identifier) => {
 };
 
 // Generate JWT tokens with enhanced security
+const resolveUserRoles = (user) => {
+  if (!user) {
+    return [];
+  }
+
+  if (Array.isArray(user.roles) && user.roles.length > 0) {
+    return user.roles.map(role => String(role).toLowerCase());
+  }
+
+  if (user.role) {
+    return [String(user.role).toLowerCase()];
+  }
+
+  if (user.user_role) {
+    return [String(user.user_role).toLowerCase()];
+  }
+
+  return [];
+};
+
 const generateTokens = (user) => {
   const now = Math.floor(Date.now() / 1000); // Current time in seconds
   const jti = crypto.randomBytes(16).toString('hex'); // Unique JWT ID
+
+  const roles = resolveUserRoles(user);
+  const primaryRole = roles[0] || null;
 
   const accessTokenPayload = {
     userId: user.user_id,
@@ -60,6 +84,8 @@ const generateTokens = (user) => {
     type: 'access',
     iat: now,
     iss: 'real-estate-crm-api',
+    role: primaryRole,
+    roles,
     jti: jti,
     // Add user agent fingerprint for additional security
     fingerprint: crypto.createHash('sha256')
@@ -74,6 +100,8 @@ const generateTokens = (user) => {
     iat: now,
     iss: 'real-estate-crm-api',
     jti: jti + '_refresh',
+    role: primaryRole,
+    roles,
     fingerprint: accessTokenPayload.fingerprint
   };
 
@@ -247,6 +275,7 @@ const authenticate = async (req, res, next) => {
 
     // Attach user and token info to request
     req.user = user;
+    req.user.id = user.user_id;
     req.userId = user.user_id;
     req.tokenJti = decoded.jti;
     req.tokenFingerprint = decoded.fingerprint;
@@ -276,6 +305,7 @@ const optionalAuth = async (req, res, next) => {
         
         if (user) {
           req.user = user;
+          req.user.id = user.user_id;
           req.userId = user.user_id;
         }
       } catch (error) {
@@ -445,11 +475,50 @@ const cleanupExpiredTokens = () => {
   // 3. Clean up rate limiting data
 };
 
-// Start periodic cleanup
-setInterval(cleanupExpiredTokens, 60 * 60 * 1000); // Every hour
+// Start periodic cleanup (disabled during tests to avoid open handles)
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(cleanupExpiredTokens, 60 * 60 * 1000); // Every hour
+}
 
 // Backwards compatibility export for existing route imports
 const authenticateToken = authenticate;
+
+const requireRole = (roles = []) => {
+  const normalizedRoles = Array.isArray(roles) ? roles : [roles];
+
+  return (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          error: 'Authentication required',
+          message: ERROR_MESSAGES.UNAUTHORIZED,
+          code: 'UNAUTHORIZED'
+        });
+      }
+
+      if (normalizedRoles.length === 0) {
+        return next();
+      }
+
+      if (!userHasRole(req.user, normalizedRoles)) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'You do not have permission to perform this action.',
+          code: 'FORBIDDEN'
+        });
+      }
+
+      return next();
+    } catch (error) {
+      console.error('Role verification error:', error);
+      return res.status(500).json({
+        error: 'Authorization failed',
+        message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR,
+        code: 'AUTHORIZATION_ERROR'
+      });
+    }
+  };
+};
 
 module.exports = {
   authenticate,
@@ -460,5 +529,6 @@ module.exports = {
   verifyToken,
   logout,
   addToBlacklist,
-  isBlacklisted
+  isBlacklisted,
+  requireRole
 };

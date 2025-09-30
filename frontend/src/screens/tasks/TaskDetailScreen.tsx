@@ -1,6 +1,6 @@
 // Task detail screen with edit and completion tracking
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 
 import { Task, TaskPriority } from '../../types';
 import { apiService } from '../../services/api';
+import { useLoadingState } from '../../utils/loadingState';
+import { TaskDetailSkeleton } from '../../components/common/SkeletonCard';
+import { InlineLoader } from '../../components/common/LoadingIndicator';
 
 interface TaskDetailScreenProps {
   route: {
@@ -26,26 +28,30 @@ interface TaskDetailScreenProps {
 const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({ route, navigation }) => {
   const { taskId } = route.params;
   const [task, setTask] = useState<Task | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const loadingState = useLoadingState({ isLoading: true });
+  const mutationLoadingState = useLoadingState();
+  const [pendingAction, setPendingAction] = useState<'status' | 'delete' | null>(null);
+
+  const loadTaskDetail = useCallback(async () => {
+    try {
+      const response = await apiService.getTaskWithLoading(taskId, {
+        onStart: () => loadingState.startLoading('Loading task details…', { timeout: 15000 }),
+        onComplete: loadingState.stopLoading,
+        onError: (message) => loadingState.setError(message),
+      });
+
+      if (response?.data) {
+        setTask(response.data);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load task details';
+      loadingState.setError(message);
+    }
+  }, [taskId, loadingState]);
 
   useEffect(() => {
     loadTaskDetail();
-  }, [taskId]);
-
-  const loadTaskDetail = async () => {
-    try {
-      setIsLoading(true);
-      const response = await apiService.getTask(taskId);
-      setTask(response.data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load task details';
-      Alert.alert('Error', message, [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [loadTaskDetail]);
 
   const toggleTaskCompletion = async () => {
     if (!task) return;
@@ -62,9 +68,14 @@ const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({ route, navigation }
           text: 'Confirm',
           onPress: async () => {
             try {
-              await apiService.updateTask(taskId, {
-                is_completed: newStatus,
-                completed_at: newStatus ? new Date().toISOString() : undefined,
+              setPendingAction('status');
+              await apiService.updateTaskWithLoading(taskId, {
+                isCompleted: newStatus,
+                completedAt: newStatus ? new Date().toISOString() : undefined,
+              }, {
+                onStart: () => mutationLoadingState.startLoading(newStatus ? 'Completing task…' : 'Reopening task…'),
+                onComplete: mutationLoadingState.stopLoading,
+                onError: (message) => mutationLoadingState.setError(message),
               });
 
               setTask(prev => prev ? {
@@ -75,7 +86,12 @@ const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({ route, navigation }
 
               Alert.alert('Success', `Task ${actionText}d successfully`);
             } catch (error) {
-              Alert.alert('Error', `Failed to ${actionText} task`);
+              const message = error instanceof Error ? error.message : `Failed to ${actionText} task`;
+              mutationLoadingState.setError(message);
+              Alert.alert('Error', message);
+            } finally {
+              setPendingAction(null);
+              mutationLoadingState.stopLoading();
             }
           },
         },
@@ -107,12 +123,23 @@ const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({ route, navigation }
           style: 'destructive',
           onPress: async () => {
             try {
-              await apiService.deleteTask(taskId);
+              setPendingAction('delete');
+              await apiService.deleteTaskWithLoading(taskId, {
+                onStart: () => mutationLoadingState.startLoading('Deleting task…'),
+                onComplete: mutationLoadingState.stopLoading,
+                onError: (message) => mutationLoadingState.setError(message),
+              });
+
               Alert.alert('Success', 'Task deleted successfully', [
                 { text: 'OK', onPress: () => navigation.goBack() },
               ]);
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete task');
+              const message = error instanceof Error ? error.message : 'Failed to delete task';
+              mutationLoadingState.setError(message);
+              Alert.alert('Error', message);
+            } finally {
+              setPendingAction(null);
+              mutationLoadingState.stopLoading();
             }
           },
         },
@@ -134,11 +161,27 @@ const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({ route, navigation }
     return new Date(dueDate) < new Date();
   };
 
-  if (isLoading) {
+  if (loadingState.isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading task details...</Text>
+      <View style={styles.skeletonContainer}>
+        <TaskDetailSkeleton animated theme="auto" />
+      </View>
+    );
+  }
+
+  if (loadingState.error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorTitle}>Unable to load this task</Text>
+        <Text style={styles.errorMessage}>{loadingState.error}</Text>
+        <View style={styles.errorActions}>
+          <TouchableOpacity style={styles.retryButton} onPress={loadTaskDetail}>
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.secondaryButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -218,6 +261,15 @@ const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({ route, navigation }
             <Text style={[styles.actionButtonText, styles.deleteButtonText]}>🗑️ Delete</Text>
           </TouchableOpacity>
         </View>
+
+        {mutationLoadingState.isLoading && (
+          <View style={styles.inlineActionLoader}>
+            <InlineLoader color="secondary" size="sm" accessibilityLabel="Processing task action" />
+            <Text style={styles.inlineActionText}>
+              {pendingAction === 'delete' ? 'Deleting task…' : 'Updating task…'}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Task Details */}
@@ -366,16 +418,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  loadingContainer: {
+  skeletonContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    padding: 24,
     backgroundColor: '#f5f5f5',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
   },
   errorContainer: {
     flex: 1,
@@ -383,9 +430,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
   },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#d32f2f',
+    marginBottom: 12,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#555',
+    textAlign: 'center',
+    paddingHorizontal: 32,
+    marginBottom: 24,
+  },
+  errorActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
   errorText: {
     fontSize: 18,
     color: '#f44336',
+  },
+  retryButton: {
+    backgroundColor: '#1976D2',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginHorizontal: 6,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#e0e0e0',
+    marginHorizontal: 6,
+  },
+  secondaryButtonText: {
+    color: '#424242',
+    fontSize: 16,
+    fontWeight: '600',
   },
   headerCard: {
     backgroundColor: '#fff',
@@ -488,6 +578,16 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  inlineActionLoader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  inlineActionText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#555',
   },
   actionButton: {
     flex: 1,

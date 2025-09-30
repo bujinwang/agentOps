@@ -1,6 +1,6 @@
 // Comprehensive Tasks screen with full functionality
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,27 +13,39 @@ import {
 
 import { Task, TaskPriority } from '../../types';
 import { apiService } from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
 import { useLoadingState } from '../../utils/loadingState';
 import { TaskListSkeleton } from '../../components/common/SkeletonList';
+import SkeletonCard from '../../components/common/SkeletonCard';
+import { InlineLoader } from '../../components/common/LoadingIndicator';
+import {
+  MaterialColors,
+  MaterialSpacing,
+  MaterialTypography,
+} from '../../styles/MaterialDesign';
 
 interface TasksScreenProps {
   navigation: any;
 }
 
 const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
-  const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed' | 'overdue'>('all');
+  const [togglingTaskId, setTogglingTaskId] = useState<number | null>(null);
 
   // Enhanced loading state management
-  const initialLoadingState = useLoadingState();
+  const initialLoadingState = useLoadingState({ isLoading: true });
   const refreshLoadingState = useLoadingState();
+  const mutationLoadingState = useLoadingState();
+
+  const taskFilters = useMemo(() => ([
+    { key: 'all', label: 'All' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'completed', label: 'Done' },
+    { key: 'overdue', label: 'Overdue' },
+  ] as const), []);
 
   const loadTasks = useCallback(async (refresh = false) => {
     const currentLoadingState = refresh ? refreshLoadingState : initialLoadingState;
-
-    currentLoadingState.startLoading(refresh ? 'Refreshing tasks...' : 'Loading tasks...');
 
     try {
       const params: any = {
@@ -51,15 +63,24 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
         params.overdue = true;
       }
 
-      const response = await apiService.getTasks(params);
+      const response = await apiService.getTasksWithLoading(params, {
+        onStart: (message) => currentLoadingState.startLoading(
+          refresh ? 'Refreshing tasks…' : message || 'Loading tasks…',
+          { timeout: 20000 }
+        ),
+        onProgress: currentLoadingState.updateProgress,
+        onComplete: currentLoadingState.stopLoading,
+        onError: (errorMessage) => currentLoadingState.setError(errorMessage),
+      });
 
-      if (response) {
-        setTasks(response.data || []);
-        currentLoadingState.stopLoading();
+      if (response?.data) {
+        setTasks(response.data);
       }
     } catch (error) {
       console.error('Error loading tasks:', error);
-      currentLoadingState.setError('Failed to load tasks');
+      const message = error instanceof Error ? error.message : 'Failed to load tasks';
+      currentLoadingState.setError(message);
+      Alert.alert('Error', message);
     }
   }, [filter, initialLoadingState, refreshLoadingState]);
 
@@ -81,11 +102,17 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
 
   const toggleTaskCompletion = async (taskId: number, currentStatus: boolean) => {
     try {
-      await apiService.updateTask(taskId, {
+      setTogglingTaskId(taskId);
+
+      await apiService.updateTaskWithLoading(taskId, {
         isCompleted: !currentStatus,
         completedAt: !currentStatus ? new Date().toISOString() : undefined,
+      }, {
+        onStart: () => mutationLoadingState.startLoading('Updating task…'),
+        onComplete: mutationLoadingState.stopLoading,
+        onError: (message) => mutationLoadingState.setError(message),
       });
-      
+
       // Update local state
       setTasks(prevTasks =>
         prevTasks.map(task =>
@@ -95,7 +122,12 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
         )
       );
     } catch (error) {
-      Alert.alert('Error', 'Failed to update task');
+      const message = error instanceof Error ? error.message : 'Failed to update task';
+      mutationLoadingState.setError(message);
+      Alert.alert('Error', message);
+    } finally {
+      setTogglingTaskId(null);
+      mutationLoadingState.stopLoading();
     }
   };
 
@@ -174,7 +206,7 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
                 <Text style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
                   {item.priority}
                 </Text>
-                
+
                 {item.dueDate && (
                   <Text style={[styles.dueDate, overdue && styles.overdueDate]}>
                     Due: {new Date(item.dueDate).toLocaleDateString()}
@@ -185,6 +217,13 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
               {item.leadId && (
                 <Text style={styles.linkedLead}>📋 Linked to lead</Text>
               )}
+
+              {togglingTaskId === item.taskId && mutationLoadingState.isLoading && (
+                <View style={styles.inlineLoader}>
+                  <InlineLoader color="secondary" size="sm" accessibilityLabel="Updating task" />
+                  <Text style={styles.inlineLoaderText}>Updating task…</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -194,22 +233,32 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
 
   const renderFilterTabs = () => (
     <View style={styles.filterContainer}>
-      {[
-        { key: 'all', label: 'All', count: tasks.length },
-        { key: 'pending', label: 'Pending', count: tasks.filter(t => !t.isCompleted).length },
-        { key: 'completed', label: 'Done', count: tasks.filter(t => t.isCompleted).length },
-        { key: 'overdue', label: 'Overdue', count: tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && !t.isCompleted).length },
-      ].map(({ key, label, count }) => (
-        <TouchableOpacity
-          key={key}
-          style={[styles.filterTab, filter === key && styles.activeFilterTab]}
-          onPress={() => setFilter(key as any)}
-        >
-          <Text style={[styles.filterTabText, filter === key && styles.activeFilterTabText]}>
-            {label} ({count})
-          </Text>
-        </TouchableOpacity>
-      ))}
+      {taskFilters.map(({ key, label }) => {
+        const count = (() => {
+          switch (key) {
+            case 'pending':
+              return tasks.filter(t => !t.isCompleted).length;
+            case 'completed':
+              return tasks.filter(t => t.isCompleted).length;
+            case 'overdue':
+              return tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && !t.isCompleted).length;
+            default:
+              return tasks.length;
+          }
+        })();
+
+        return (
+          <TouchableOpacity
+            key={key}
+            style={[styles.filterTab, filter === key && styles.activeFilterTab]}
+            onPress={() => setFilter(key as typeof filter)}
+          >
+            <Text style={[styles.filterTabText, filter === key && styles.activeFilterTabText]}>
+              {label} ({count})
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 
@@ -242,21 +291,27 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
   if (initialLoadingState.isLoading && tasks.length === 0) {
     return (
       <View style={styles.container}>
-        {/* Header skeleton */}
-        <View style={styles.header}>
-          <View style={{ height: 24, backgroundColor: '#e0e0e0', borderRadius: 4, marginBottom: 8, width: '60%' }} />
-          <View style={{ height: 16, backgroundColor: '#e0e0e0', borderRadius: 4, width: '40%' }} />
+        <View style={styles.skeletonHeader}>
+          <View style={styles.skeletonBlock}>
+            <SkeletonCard height={120} animated theme="auto" />
+          </View>
+          <View style={styles.skeletonBlock}>
+            <SkeletonCard height={80} animated theme="auto" />
+          </View>
         </View>
+        <TaskListSkeleton count={6} animated={true} />
+      </View>
+    );
+  }
 
-        {/* Filter tabs skeleton */}
-        <View style={styles.filterContainer}>
-          {[1, 2, 3, 4].map(i => (
-            <View key={i} style={[styles.filterTab, { backgroundColor: '#e0e0e0' }]} />
-          ))}
-        </View>
-
-        {/* Tasks list skeleton */}
-        <TaskListSkeleton count={5} animated={true} />
+  if (initialLoadingState.error && tasks.length === 0) {
+    return (
+      <View style={styles.errorState}>
+        <Text style={styles.errorStateTitle}>We couldn&apos;t load your tasks</Text>
+        <Text style={styles.errorStateMessage}>{initialLoadingState.error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => loadTasks()}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -288,7 +343,12 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
       />
 
       {/* Floating Add Button */}
-      <TouchableOpacity style={styles.fab} onPress={navigateToAddTask}>
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={navigateToAddTask}
+        accessibilityRole="button"
+        accessibilityLabel="Add task"
+      >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
     </View>
@@ -298,95 +358,93 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: MaterialColors.neutral[50],
   },
   header: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    backgroundColor: MaterialColors.surface,
+    paddingHorizontal: MaterialSpacing.lg,
+    paddingTop: MaterialSpacing.lg,
+    paddingBottom: MaterialSpacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: MaterialColors.neutral[200],
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    ...MaterialTypography.headlineSmall,
+    color: MaterialColors.neutral[900],
+    marginBottom: MaterialSpacing.xs,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#666',
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
   },
   filterContainer: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: MaterialColors.surface,
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: MaterialColors.neutral[200],
   },
   filterTab: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: MaterialSpacing.sm,
+    paddingHorizontal: MaterialSpacing.md,
     borderRadius: 16,
-    marginHorizontal: 4,
-    backgroundColor: '#f0f0f0',
+    marginHorizontal: MaterialSpacing.xs,
+    backgroundColor: MaterialColors.neutral[100],
     alignItems: 'center',
   },
   activeFilterTab: {
-    backgroundColor: '#2196F3',
+    backgroundColor: MaterialColors.primary[500],
   },
   filterTabText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#666',
+    ...MaterialTypography.labelMedium,
+    color: MaterialColors.neutral[600],
   },
   activeFilterTabText: {
-    color: '#fff',
+    color: MaterialColors.onPrimary,
   },
   listContainer: {
-    padding: 16,
+    padding: MaterialSpacing.md,
   },
   taskCard: {
-    backgroundColor: '#fff',
+    backgroundColor: MaterialColors.surface,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: MaterialSpacing.md,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
   },
   completedTask: {
-    opacity: 0.7,
-    backgroundColor: '#f8f9fa',
+    opacity: 0.75,
+    backgroundColor: MaterialColors.neutral[100],
   },
   taskHeader: {
     flexDirection: 'row',
-    padding: 16,
+    padding: MaterialSpacing.md,
   },
   checkboxContainer: {
-    marginRight: 12,
-    paddingTop: 2,
+    marginRight: MaterialSpacing.sm,
+    paddingTop: MaterialSpacing.xs,
   },
   checkbox: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#ddd',
+    borderColor: MaterialColors.neutral[300],
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: MaterialColors.surface,
   },
   checkedBox: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+    backgroundColor: MaterialColors.secondary[500],
+    borderColor: MaterialColors.secondary[500],
   },
   checkmark: {
-    color: '#fff',
+    color: MaterialColors.onSecondary,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -394,105 +452,147 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   taskTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  completedText: {
-    textDecorationLine: 'line-through',
-    color: '#999',
+    ...MaterialTypography.titleMedium,
+    color: MaterialColors.neutral[900],
+    marginBottom: MaterialSpacing.xs,
   },
   taskDescription: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 12,
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
+    marginBottom: MaterialSpacing.xs,
+  },
+  completedText: {
+    color: MaterialColors.neutral[500],
+    textDecorationLine: 'line-through',
   },
   taskMeta: {
-    gap: 8,
+    marginTop: MaterialSpacing.sm,
   },
   taskMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: MaterialSpacing.xs,
   },
   priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    ...MaterialTypography.labelSmall,
+    color: MaterialColors.onSecondary,
+    paddingVertical: MaterialSpacing.xs,
+    paddingHorizontal: MaterialSpacing.sm,
     borderRadius: 12,
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '500',
-    alignSelf: 'flex-start',
   },
   dueDate: {
-    fontSize: 12,
-    color: '#666',
+    ...MaterialTypography.labelSmall,
+    color: MaterialColors.neutral[600],
   },
   overdueDate: {
-    color: '#F44336',
+    color: MaterialColors.error[600],
     fontWeight: '600',
   },
   linkedLead: {
-    fontSize: 12,
-    color: '#2196F3',
-    fontWeight: '500',
+    ...MaterialTypography.labelSmall,
+    color: MaterialColors.primary[600],
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 64,
+    paddingVertical: MaterialSpacing.xxl,
+    paddingHorizontal: MaterialSpacing.xl,
   },
   emptyStateIcon: {
     fontSize: 48,
-    marginBottom: 16,
+    marginBottom: MaterialSpacing.md,
   },
   emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    ...MaterialTypography.titleLarge,
+    color: MaterialColors.neutral[900],
+    marginBottom: MaterialSpacing.sm,
+    textAlign: 'center',
   },
   emptyStateText: {
-    fontSize: 16,
-    color: '#666',
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
     textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 32,
-    lineHeight: 24,
+    marginBottom: MaterialSpacing.lg,
   },
   addButton: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    backgroundColor: MaterialColors.primary[500],
+    paddingHorizontal: MaterialSpacing.lg,
+    paddingVertical: MaterialSpacing.sm,
     borderRadius: 8,
   },
   addButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    ...MaterialTypography.labelLarge,
+    color: MaterialColors.onPrimary,
     fontWeight: '600',
   },
   fab: {
     position: 'absolute',
-    right: 16,
-    bottom: 16,
+    right: MaterialSpacing.xl,
+    bottom: MaterialSpacing.xl,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#2196F3',
-    justifyContent: 'center',
+    backgroundColor: MaterialColors.secondary[500],
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   fabText: {
-    fontSize: 24,
-    color: '#fff',
-    fontWeight: '300',
+    fontSize: 32,
+    color: MaterialColors.onSecondary,
+    lineHeight: 32,
+  },
+  skeletonHeader: {
+    paddingHorizontal: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.md,
+  },
+  skeletonBlock: {
+    marginBottom: MaterialSpacing.sm,
+  },
+  errorState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: MaterialSpacing.xxl,
+    backgroundColor: MaterialColors.neutral[50],
+  },
+  errorStateTitle: {
+    ...MaterialTypography.titleLarge,
+    color: MaterialColors.error[600],
+    marginBottom: MaterialSpacing.sm,
+    textAlign: 'center',
+  },
+  errorStateMessage: {
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
+    marginBottom: MaterialSpacing.lg,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: MaterialColors.primary[500],
+    paddingHorizontal: MaterialSpacing.xl,
+    paddingVertical: MaterialSpacing.sm,
+    borderRadius: 999,
+  },
+  retryButtonText: {
+    ...MaterialTypography.labelLarge,
+    color: MaterialColors.onPrimary,
+    fontWeight: '600',
+  },
+  inlineLoader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: MaterialSpacing.xs,
+  },
+  inlineLoaderText: {
+    ...MaterialTypography.bodySmall,
+    color: MaterialColors.neutral[600],
+    marginLeft: MaterialSpacing.xs,
   },
 });
 

@@ -1,19 +1,23 @@
-const realExpressValidator = jest.requireActual('express-validator');
-const defaultValidationResultImpl = (...args) => realExpressValidator.validationResult(...args);
-const validationResultMock = jest.fn(defaultValidationResultImpl);
+const mockValidationResultImpl = jest.fn();
 
-jest.mock('express-validator', () => ({
-  ...realExpressValidator,
-  validationResult: validationResultMock
-}));
+jest.mock('express-validator', () => {
+  const actual = jest.requireActual('express-validator');
+  return {
+    ...actual,
+    validationResult: mockValidationResultImpl
+  };
+});
 
 const { validationResult } = require('express-validator');
 const { validateRegister, validateLogin, validateLeadCreation, handleValidationErrors } = require('../../src/middleware/validation');
 const { ValidationError } = require('../../src/middleware/errorHandler');
 
 beforeEach(() => {
-  validationResult.mockImplementation(defaultValidationResultImpl);
-  validationResult.mockClear();
+  mockValidationResultImpl.mockClear();
+  mockValidationResultImpl.mockReturnValue({
+    isEmpty: jest.fn().mockReturnValue(true),
+    array: jest.fn().mockReturnValue([])
+  });
 });
 
 describe('Validation Middleware', () => {

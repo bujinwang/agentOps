@@ -1,6 +1,6 @@
 // Lead detail screen with enhanced Material Design layout and interactions
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
 
@@ -24,6 +23,9 @@ import {
   MaterialMotion,
 } from '../../styles/MaterialDesign';
 import { BusinessIcon } from '../../components/MaterialIcon';
+import { useLoadingState } from '../../utils/loadingState';
+import { LeadDetailSkeleton } from '../../components/common/SkeletonCard';
+import { InlineLoader } from '../../components/common/LoadingIndicator';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -39,14 +41,33 @@ interface LeadDetailScreenProps {
 const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }) => {
   const { leadId } = route.params;
   const [lead, setLead] = useState<Lead | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const loadingState = useLoadingState({ isLoading: true });
+  const mutationLoadingState = useLoadingState();
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
   const [actionScaleAnim] = useState(new Animated.Value(1));
 
+  const loadLeadDetail = useCallback(async () => {
+    try {
+      const response = await apiService.getLeadWithLoading(leadId, {
+        onStart: () => loadingState.startLoading('Loading lead details…', { timeout: 15000 }),
+        onProgress: loadingState.updateProgress,
+        onComplete: loadingState.stopLoading,
+        onError: (message) => loadingState.setError(message),
+      });
+
+      if (response?.data) {
+        setLead(response.data);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load lead details';
+      loadingState.setError(message);
+    }
+  }, [leadId, loadingState]);
+
   useEffect(() => {
     loadLeadDetail();
-  }, [leadId]);
+  }, [loadLeadDetail]);
 
   useEffect(() => {
     if (lead) {
@@ -66,20 +87,6 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
     }
   }, [lead]);
 
-  const loadLeadDetail = async () => {
-    try {
-      setIsLoading(true);
-      const response = await apiService.getLead(leadId);
-      setLead(response.data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load lead details';
-      Alert.alert('Error', message, [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleStatusChange = (newStatus: LeadStatus) => {
     Alert.alert(
@@ -99,12 +106,17 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
     if (!lead) return;
 
     try {
+      mutationLoadingState.startLoading('Updating lead status…');
+
       await apiService.updateLeadStatus(leadId, newStatus);
       setLead(prev => prev ? { ...prev, status: newStatus } : null);
       Alert.alert('Success', 'Lead status updated successfully');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update status';
+      mutationLoadingState.setError(message);
       Alert.alert('Error', message);
+    } finally {
+      mutationLoadingState.stopLoading();
     }
   };
 
@@ -161,11 +173,27 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
     'Archived',
   ];
 
-  if (isLoading) {
+  if (loadingState.isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading lead details...</Text>
+      <View style={styles.skeletonContainer}>
+        <LeadDetailSkeleton animated theme="auto" />
+      </View>
+    );
+  }
+
+  if (loadingState.error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorTitle}>Unable to load this lead</Text>
+        <Text style={styles.errorMessage}>{loadingState.error}</Text>
+        <View style={styles.errorActions}>
+          <TouchableOpacity style={styles.retryButton} onPress={loadLeadDetail}>
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.secondaryButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -228,6 +256,13 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
             {lead.status}
           </Text>
         </View>
+
+        {mutationLoadingState.isLoading && (
+          <View style={styles.inlineLoader}>
+            <InlineLoader color="secondary" size="sm" accessibilityLabel="Updating lead status" />
+            <Text style={styles.inlineLoaderText}>Updating lead status…</Text>
+          </View>
+        )}
       </Animated.View>
 
       {/* Quick Actions */}
@@ -529,14 +564,16 @@ const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }
               style={[
                 styles.statusOption,
                 lead.status === status && styles.statusOptionActive,
+                mutationLoadingState.isLoading && styles.statusOptionDisabled,
               ]}
               onPress={() => handleStatusChange(status)}
-              disabled={lead.status === status}
+              disabled={lead.status === status || mutationLoadingState.isLoading}
             >
               <Text
                 style={[
                   styles.statusOptionText,
                   lead.status === status && styles.statusOptionTextActive,
+                  mutationLoadingState.isLoading && styles.statusOptionTextDisabled,
                 ]}
               >
                 {status}
@@ -556,16 +593,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: MaterialColors.neutral[50],
   },
-  loadingContainer: {
+  skeletonContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    padding: MaterialSpacing.xl,
     backgroundColor: MaterialColors.neutral[50],
-  },
-  loadingText: {
-    marginTop: MaterialSpacing.md,
-    ...MaterialTypography.bodyLarge,
-    color: MaterialColors.neutral[600],
   },
   errorContainer: {
     flex: 1,
@@ -573,9 +605,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: MaterialColors.neutral[50],
   },
+  errorTitle: {
+    ...MaterialTypography.titleLarge,
+    color: MaterialColors.error[600],
+    marginBottom: MaterialSpacing.sm,
+    textAlign: 'center',
+    paddingHorizontal: MaterialSpacing.xl,
+  },
+  errorMessage: {
+    ...MaterialTypography.bodyMedium,
+    color: MaterialColors.neutral[600],
+    textAlign: 'center',
+    paddingHorizontal: MaterialSpacing.xl,
+    marginBottom: MaterialSpacing.lg,
+  },
+  errorActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
   errorText: {
     ...MaterialTypography.headlineSmall,
     color: MaterialColors.error[600],
+  },
+  retryButton: {
+    backgroundColor: MaterialColors.primary[500],
+    paddingHorizontal: MaterialSpacing.lg,
+    paddingVertical: MaterialSpacing.sm,
+    borderRadius: MaterialShape.small,
+    marginHorizontal: MaterialSpacing.xs,
+  },
+  retryButtonText: {
+    ...MaterialTypography.labelLarge,
+    color: MaterialColors.onPrimary,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    paddingHorizontal: MaterialSpacing.lg,
+    paddingVertical: MaterialSpacing.sm,
+    borderRadius: MaterialShape.small,
+    backgroundColor: MaterialColors.neutral[200],
+    marginHorizontal: MaterialSpacing.xs,
+  },
+  secondaryButtonText: {
+    ...MaterialTypography.labelLarge,
+    color: MaterialColors.neutral[700],
+    fontWeight: '600',
   },
   headerCard: {
     backgroundColor: MaterialColors.surface,
@@ -635,6 +709,16 @@ const styles = StyleSheet.create({
   statusBadge: {
     ...MaterialTypography.labelLarge,
     fontWeight: '600',
+    marginLeft: MaterialSpacing.xs,
+  },
+  inlineLoader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: MaterialSpacing.sm,
+  },
+  inlineLoaderText: {
+    ...MaterialTypography.bodySmall,
+    color: MaterialColors.neutral[600],
     marginLeft: MaterialSpacing.xs,
   },
   actionCard: {
@@ -730,6 +814,9 @@ const styles = StyleSheet.create({
     backgroundColor: MaterialColors.primary[500],
     borderColor: MaterialColors.primary[500],
   },
+  statusOptionDisabled: {
+    opacity: 0.6,
+  },
   statusOptionText: {
     ...MaterialTypography.bodyMedium,
     color: MaterialColors.neutral[600],
@@ -737,6 +824,9 @@ const styles = StyleSheet.create({
   },
   statusOptionTextActive: {
     color: MaterialColors.onPrimary,
+  },
+  statusOptionTextDisabled: {
+    color: MaterialColors.neutral[400],
   },
   bottomSpacer: {
     height: MaterialSpacing.xxxl,

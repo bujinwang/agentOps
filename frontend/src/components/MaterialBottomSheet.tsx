@@ -1,21 +1,21 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Dimensions,
   ScrollView,
   Platform,
 } from 'react-native';
-import { 
-  MaterialColors, 
-  MaterialElevation, 
-  MaterialSpacing, 
+import {
+  MaterialColors,
+  MaterialElevation,
+  MaterialSpacing,
   MaterialTypography,
-  MaterialShape 
+  MaterialShape,
 } from '../styles/MaterialDesign';
+import { useResponsive } from '../hooks/useResponsive';
 
 interface MaterialBottomSheetProps {
   visible: boolean;
@@ -28,53 +28,108 @@ interface MaterialBottomSheetProps {
   enableSwipe?: boolean;
 }
 
+const ANIMATION_DURATION = 220;
+
 const MaterialBottomSheet: React.FC<MaterialBottomSheetProps> = ({
   visible,
   onDismiss,
   title,
   children,
-  height = 300,
+  height,
   backgroundColor = MaterialColors.surface,
   showDragIndicator = true,
   enableSwipe = true,
 }) => {
-  const slideAnim = new Animated.Value(visible ? 0 : height);
-  const opacityAnim = new Animated.Value(visible ? 1 : 0);
-  const { height: screenHeight } = Dimensions.get('window');
+  const responsive = useResponsive();
+  const slideAnim = useRef(new Animated.Value(visible ? 0 : responsive.height)).current;
+  const opacityAnim = useRef(new Animated.Value(visible ? 1 : 0)).current;
+
+  const {
+    sheetWidth,
+    sheetMaxHeight,
+    sheetPadding,
+    dragIndicatorWidth,
+    containerPaddingBottom,
+    horizontalInset,
+  } = useMemo(() => {
+    const computedMaxHeight = Math.min(
+      height ?? responsive.height * (responsive.isDesktop ? 0.7 : responsive.isTablet ? 0.8 : 0.88),
+      responsive.height * (responsive.isLandscape ? 0.95 : 0.9)
+    );
+
+    const maxContentWidth = responsive.getMaxContentWidth({
+      tablet: 760,
+      desktop: 960,
+    });
+
+    const width = responsive.isDesktop
+      ? Math.min(responsive.width * 0.6, maxContentWidth)
+      : responsive.isTablet
+        ? Math.min(responsive.width * 0.9, maxContentWidth)
+        : responsive.width;
+
+    return {
+      sheetWidth: width,
+      sheetMaxHeight: computedMaxHeight,
+      sheetPadding: responsive.getResponsivePadding(MaterialSpacing.lg, {
+        mobile: MaterialSpacing.md,
+        tablet: MaterialSpacing.lg,
+        desktop: MaterialSpacing.xl,
+      }),
+      dragIndicatorWidth: responsive.scaleValue(42),
+      containerPaddingBottom:
+        Platform.OS === 'ios'
+          ? responsive.getResponsivePadding(MaterialSpacing.lg, { mobile: MaterialSpacing.lg }) + 16
+          : responsive.getResponsivePadding(MaterialSpacing.md, { mobile: MaterialSpacing.md }),
+      horizontalInset: responsive.isDesktop ? responsive.getResponsivePadding(MaterialSpacing.xl, { desktop: 48 }) : 0,
+    };
+  }, [height, responsive]);
+
+  useEffect(() => {
+    slideAnim.setValue(visible ? 0 : sheetMaxHeight);
+    opacityAnim.setValue(visible ? 1 : 0);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 0,
-          friction: 8,
+          friction: 9,
           tension: 40,
           useNativeDriver: true,
         }),
         Animated.timing(opacityAnim, {
           toValue: 1,
-          duration: 200,
+          duration: ANIMATION_DURATION,
           useNativeDriver: true,
         }),
       ]).start();
     } else {
       Animated.parallel([
         Animated.spring(slideAnim, {
-          toValue: height,
-          friction: 8,
+          toValue: sheetMaxHeight,
+          friction: 9,
           tension: 40,
           useNativeDriver: true,
         }),
         Animated.timing(opacityAnim, {
           toValue: 0,
-          duration: 200,
+          duration: ANIMATION_DURATION,
           useNativeDriver: true,
         }),
       ]).start(() => {
         onDismiss();
       });
     }
-  }, [visible]);
+  }, [visible, sheetMaxHeight, onDismiss, slideAnim, opacityAnim]);
+
+  useEffect(() => {
+    if (!visible) {
+      slideAnim.setValue(sheetMaxHeight);
+      opacityAnim.setValue(0);
+    }
+  }, [sheetMaxHeight, visible, slideAnim, opacityAnim]);
 
   const handleBackdropPress = () => {
     onDismiss();
@@ -88,13 +143,11 @@ const MaterialBottomSheet: React.FC<MaterialBottomSheetProps> = ({
 
   return (
     <>
-      {/* Backdrop */}
       <Animated.View
         style={[
           styles.backdrop,
           {
             opacity: opacityAnim,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
           },
         ]}
       >
@@ -105,58 +158,57 @@ const MaterialBottomSheet: React.FC<MaterialBottomSheetProps> = ({
         />
       </Animated.View>
 
-      {/* Bottom Sheet Content */}
-      <Animated.View
-        style={[
-          styles.container,
-          {
-            backgroundColor,
-            transform: [{ translateY: slideAnim }],
-            maxHeight: height,
-          },
-        ]}
-      >
-        {/* Drag Indicator */}
-        {showDragIndicator && (
-          <TouchableOpacity
-            style={styles.dragIndicatorContainer}
-            onPress={handleDrag}
-            activeOpacity={0.8}
-          >
-            <View style={styles.dragIndicator} />
-          </TouchableOpacity>
-        )}
-
-        {/* Header with Title */}
-        {title && (
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: MaterialColors.onSurface }]}>
-              {title}
-            </Text>
+      <View style={[styles.wrapper, { paddingHorizontal: horizontalInset }]} pointerEvents={visible ? 'auto' : 'none'}>
+        <Animated.View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor,
+              transform: [{ translateY: slideAnim }],
+              maxHeight: sheetMaxHeight,
+              width: sheetWidth,
+              paddingHorizontal: sheetPadding,
+              paddingBottom: containerPaddingBottom,
+            },
+          ]}
+        >
+          {showDragIndicator && (
             <TouchableOpacity
-              style={styles.closeButton}
-              onPress={onDismiss}
+              style={styles.dragIndicatorContainer}
+              onPress={handleDrag}
               activeOpacity={0.8}
             >
-              <Text style={styles.closeButtonText}>✕</Text>
+              <View style={[styles.dragIndicator, { width: dragIndicatorWidth }]} />
             </TouchableOpacity>
-          </View>
-        )}
+          )}
 
-        {/* Content */}
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          {children}
-        </ScrollView>
-      </Animated.View>
+          {title && (
+            <View style={styles.header}>
+              <Text style={[styles.title, { color: MaterialColors.onSurface }]}>{title}</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={onDismiss}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={{ paddingBottom: sheetPadding / 2 }}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            {children}
+          </ScrollView>
+        </Animated.View>
+      </View>
     </>
   );
 };
 
-// Material Design Action Button for Bottom Sheet
 export const MaterialBottomSheetAction = ({
   label,
   onPress,
@@ -170,29 +222,38 @@ export const MaterialBottomSheetAction = ({
   color?: string;
   destructive?: boolean;
 }) => {
-  const handlePress = () => {
-    onPress();
-  };
+  const { getTouchTargetSize, getResponsiveSpacing, getResponsiveFontSize } = useResponsive();
+  const buttonHeight = getTouchTargetSize(48);
+  const horizontalPadding = getResponsiveSpacing(MaterialSpacing.md);
+  const fontSize = getResponsiveFontSize(16);
 
   return (
     <TouchableOpacity
-      style={styles.actionButton}
-      onPress={handlePress}
+      style={[styles.actionButton, { minHeight: buttonHeight, paddingHorizontal: horizontalPadding }]}
+      onPress={onPress}
       activeOpacity={0.8}
     >
       <View style={styles.actionContent}>
         {icon && (
-          <Text style={[styles.actionIcon, { color: destructive ? MaterialColors.error[500] : color }]}>
+          <Text
+            style={[
+              styles.actionIcon,
+              { color: destructive ? MaterialColors.error[500] : color },
+            ]}
+          >
             {icon}
           </Text>
         )}
-        <Text style={[
-          styles.actionLabel,
-          { 
-            color: destructive ? MaterialColors.error[500] : MaterialColors.onSurface,
-            fontWeight: destructive ? '600' : '500',
-          }
-        ]}>
+        <Text
+          style={[
+            styles.actionLabel,
+            {
+              color: destructive ? MaterialColors.error[500] : MaterialColors.onSurface,
+              fontWeight: destructive ? '600' : '500',
+              fontSize,
+            },
+          ]}
+        >
           {label}
         </Text>
       </View>
@@ -200,12 +261,10 @@ export const MaterialBottomSheetAction = ({
   );
 };
 
-// Material Design Divider for Bottom Sheet
 export const MaterialBottomSheetDivider = () => (
   <View style={styles.divider} />
 );
 
-// Material Design Section Header for Bottom Sheet
 export const MaterialBottomSheetSection = ({
   title,
   children,
@@ -214,49 +273,42 @@ export const MaterialBottomSheetSection = ({
   children: React.ReactNode;
 }) => (
   <View style={styles.section}>
-    <Text style={[styles.sectionTitle, { color: MaterialColors.onSurfaceVariant }]}>
-      {title}
-    </Text>
+    <Text style={[styles.sectionTitle, { color: MaterialColors.onSurfaceVariant }]}>{title}</Text>
     {children}
   </View>
 );
 
 const styles = StyleSheet.create({
   backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     zIndex: 999,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   backdropTouchable: {
     flex: 1,
   },
-  container: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: MaterialSpacing.md,
-    paddingTop: MaterialSpacing.sm,
-    paddingBottom: Platform.OS === 'ios' ? 34 : MaterialSpacing.md,
+  wrapper: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
     zIndex: 1000,
-    ...MaterialElevation.level3,
+  },
+  sheet: {
+    borderTopLeftRadius: MaterialShape.extraLarge,
+    borderTopRightRadius: MaterialShape.extraLarge,
+    paddingTop: MaterialSpacing.sm,
+    ...MaterialElevation.level4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   dragIndicatorContainer: {
     alignItems: 'center',
-    marginBottom: MaterialSpacing.md,
+    paddingVertical: MaterialSpacing.sm,
   },
   dragIndicator: {
-    width: 32,
     height: 4,
     borderRadius: 2,
     backgroundColor: MaterialColors.neutral[400],
@@ -266,7 +318,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: MaterialSpacing.md,
-    paddingHorizontal: MaterialSpacing.xs,
   },
   title: {
     ...MaterialTypography.titleLarge,
@@ -285,17 +336,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionButton: {
-    paddingVertical: MaterialSpacing.md,
-    paddingHorizontal: MaterialSpacing.sm,
-    marginVertical: MaterialSpacing.xs,
+    width: '100%',
+    borderRadius: MaterialShape.medium,
+    marginTop: MaterialSpacing.sm,
+    backgroundColor: MaterialColors.surface,
+    ...MaterialElevation.level1,
   },
   actionContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: MaterialSpacing.sm,
   },
   actionIcon: {
     fontSize: 18,
-    marginRight: MaterialSpacing.sm,
   },
   actionLabel: {
     ...MaterialTypography.bodyLarge,
@@ -305,7 +358,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: MaterialColors.neutral[200],
     marginVertical: MaterialSpacing.sm,
-    marginHorizontal: -MaterialSpacing.md,
   },
   section: {
     marginBottom: MaterialSpacing.lg,
@@ -319,4 +371,8 @@ const styles = StyleSheet.create({
 });
 
 export default MaterialBottomSheet;
-export { MaterialBottomSheetAction, MaterialBottomSheetDivider, MaterialBottomSheetSection };
+export {
+  MaterialBottomSheetAction,
+  MaterialBottomSheetDivider,
+  MaterialBottomSheetSection,
+};

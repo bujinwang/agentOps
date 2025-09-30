@@ -283,6 +283,63 @@ const validateId = [
     .toInt()
 ];
 
+// Revenue transaction validation
+const validateRevenueTransaction = [
+  body('amount')
+    .notEmpty()
+    .withMessage('Amount is required')
+    .isFloat({ min: 0 })
+    .withMessage('Amount must be a positive number'),
+  body('categoryId')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Category ID must be a positive integer'),
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Description must be less than 500 characters'),
+  body('transactionDate')
+    .optional()
+    .isISO8601()
+    .withMessage('Transaction date must be a valid date'),
+  handleValidationErrors
+];
+
+// Commission calculation validation
+const validateCommissionCalculation = [
+  body('saleAmount')
+    .notEmpty()
+    .withMessage('Sale amount is required')
+    .isFloat({ min: 0 })
+    .withMessage('Sale amount must be a positive number'),
+  body('commissionRate')
+    .optional()
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('Commission rate must be between 0 and 100'),
+  handleValidationErrors
+];
+
+// Commission structure validation
+const validateCommissionStructure = [
+  body('name')
+    .notEmpty()
+    .withMessage('Structure name is required')
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Structure name must be less than 200 characters'),
+  body('rate')
+    .notEmpty()
+    .withMessage('Commission rate is required')
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('Commission rate must be between 0 and 100'),
+  body('type')
+    .optional()
+    .isIn(['percentage', 'flat'])
+    .withMessage('Type must be either percentage or flat'),
+  handleValidationErrors
+];
+
 // Export all validation middleware
 module.exports = {
   handleValidationErrors,
@@ -295,5 +352,8 @@ module.exports = {
   validateLeadStatusUpdate,
   validateLeadFilters,
   validateUserProfileUpdate,
-  validateId
+  validateId,
+  validateRevenueTransaction,
+  validateCommissionCalculation,
+  validateCommissionStructure
 };

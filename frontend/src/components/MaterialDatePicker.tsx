@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
   MaterialTypography,
   MaterialShape 
 } from '../styles/MaterialDesign';
-import { ActionIcon, StatusIcon } from './MaterialIcon';
+import { useResponsive } from '../hooks/useResponsive';
 
 interface MaterialDatePickerProps {
   label: string;
@@ -43,6 +43,33 @@ const MaterialDatePicker: React.FC<MaterialDatePickerProps> = ({
   format = 'MM/DD/YYYY',
 }) => {
   const [showPicker, setShowPicker] = useState(false);
+  const responsive = useResponsive();
+
+  const dynamicStyles = useMemo(() => ({
+    container: {
+      maxWidth: responsive.getMaxContentWidth({ tablet: 520, desktop: 640 }),
+    },
+    input: {
+      paddingVertical: responsive.getResponsivePadding(MaterialSpacing.sm, {
+        mobile: MaterialSpacing.sm,
+        tablet: MaterialSpacing.md,
+        desktop: MaterialSpacing.md,
+      }),
+      paddingHorizontal: responsive.getResponsivePadding(MaterialSpacing.md, {
+        desktop: MaterialSpacing.lg,
+      }),
+      minHeight: responsive.getTouchTargetSize(48),
+    },
+    label: {
+      fontSize: responsive.getResponsiveFontSize(14),
+    },
+    value: {
+      fontSize: responsive.getResponsiveFontSize(16),
+    },
+    helper: {
+      fontSize: responsive.getResponsiveFontSize(12),
+    },
+  }), [responsive]);
 
   const formatDate = (date: Date): string => {
     const options: Intl.DateTimeFormatOptions = {
@@ -144,10 +171,11 @@ const MaterialDatePicker: React.FC<MaterialDatePickerProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, dynamicStyles.container]}>
       <TouchableOpacity
         style={[
           styles.inputContainer,
+          dynamicStyles.input,
           { borderColor: getBorderColor() },
           disabled && styles.disabledContainer,
         ]}
@@ -155,7 +183,7 @@ const MaterialDatePicker: React.FC<MaterialDatePickerProps> = ({
         disabled={disabled}
       >
         <View style={styles.labelContainer}>
-          <Text style={[styles.label, { color: getLabelColor() }]}>
+          <Text style={[styles.label, dynamicStyles.label, { color: getLabelColor() }]}>
             {label}
           </Text>
           {error && (
@@ -169,6 +197,7 @@ const MaterialDatePicker: React.FC<MaterialDatePickerProps> = ({
           <Text 
             style={[
               styles.value,
+              dynamicStyles.value,
               { 
                 color: disabled ? MaterialColors.neutral[500] : MaterialColors.neutral[900],
               }
@@ -186,6 +215,7 @@ const MaterialDatePicker: React.FC<MaterialDatePickerProps> = ({
       {(helperText || (error && helperText)) && (
         <Text style={[
           styles.helperText,
+          dynamicStyles.helper,
           { color: error ? MaterialColors.error[500] : MaterialColors.neutral[600] }
         ]}>
           {error && helperText ? helperText : helperText}
@@ -298,16 +328,3 @@ const styles = StyleSheet.create({
 });
 
 export default MaterialDatePicker;
-
-<StatusIcon
-  name="error"
-  size={16}
-  color={MaterialColors.error[500]}
-  state="error"
-/>
-<ActionIcon
-  name="expand_more"
-  size={20}
-  color={getLabelColor()}
-  state={disabled ? 'disabled' : 'default'}
-/>

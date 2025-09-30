@@ -11,7 +11,6 @@ import {
   Alert,
   RefreshControl,
   SafeAreaView,
-  ActivityIndicator,
   ScrollView,
 } from 'react-native';
 

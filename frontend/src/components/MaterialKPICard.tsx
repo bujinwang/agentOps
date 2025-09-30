@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,15 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { MaterialColors, MaterialElevation, MaterialSpacing, MaterialTypography } from '../styles/MaterialDesign';
+import {
+  MaterialColors,
+  MaterialElevation,
+  MaterialSpacing,
+  MaterialTypography,
+  MaterialShape,
+} from '../styles/MaterialDesign';
 import { BusinessIcon, StatusIcon } from './MaterialIcon';
+import { useResponsive } from '../hooks/useResponsive';
 
 interface MaterialKPICardProps {
   title: string;
@@ -25,17 +32,43 @@ const MaterialKPICard: React.FC<MaterialKPICardProps> = ({
   title,
   value,
   subtitle,
-  trend,
+  trend = 'neutral',
+  trendValue,
   icon,
   color = MaterialColors.primary[500],
   onPress,
   elevation = 1,
 }) => {
-  const scaleValue = new Animated.Value(1);
+  const responsive = useResponsive();
+  const scaleValue = useRef(new Animated.Value(1)).current;
+
+  const dynamicStyles = useMemo(() => ({
+    container: {
+      minWidth: responsive.isDesktop ? 240 : responsive.isTablet ? 200 : 160,
+      minHeight: responsive.getTouchTargetSize(104),
+      padding: responsive.getResponsivePadding(MaterialSpacing.lg, {
+        mobile: MaterialSpacing.md,
+        tablet: MaterialSpacing.lg,
+        desktop: MaterialSpacing.xl,
+      }),
+    },
+    value: {
+      fontSize: responsive.getResponsiveFontSize(28),
+    },
+    subtitle: {
+      fontSize: responsive.getResponsiveFontSize(14),
+    },
+    title: {
+      fontSize: responsive.getResponsiveFontSize(12),
+    },
+    trendValue: {
+      fontSize: responsive.getResponsiveFontSize(13),
+    },
+  }), [responsive]);
 
   const handlePressIn = () => {
     Animated.spring(scaleValue, {
-      toValue: 0.95,
+      toValue: 0.96,
       useNativeDriver: true,
     }).start();
   };
@@ -43,15 +76,21 @@ const MaterialKPICard: React.FC<MaterialKPICardProps> = ({
   const handlePressOut = () => {
     Animated.spring(scaleValue, {
       toValue: 1,
-      friction: 3,
-      tension: 40,
+      friction: 5,
+      tension: 80,
       useNativeDriver: true,
     }).start();
   };
 
   const getTrendColor = () => {
-    if (!trend) return MaterialColors.neutral[500];
-    return trend.isPositive ? MaterialColors.secondary[500] : MaterialColors.error[500];
+    switch (trend) {
+      case 'up':
+        return MaterialColors.secondary[500];
+      case 'down':
+        return MaterialColors.error[500];
+      default:
+        return MaterialColors.neutral[500];
+    }
   };
 
   const getTrendIcon = () => {
@@ -65,49 +104,42 @@ const MaterialKPICard: React.FC<MaterialKPICardProps> = ({
     }
   };
 
-  const CardContent = () => (
-    <View style={[styles.container, { backgroundColor: MaterialColors.surface }]}>
+  const content = (
+    <View style={[styles.card, dynamicStyles.container, getElevationStyle(elevation)]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: MaterialColors.neutral[700] }]} numberOfLines={1}>
+        <Text style={[styles.title, dynamicStyles.title, { color: MaterialColors.neutral[600] }]} numberOfLines={1}>
           {title}
         </Text>
         {icon && (
           <BusinessIcon
             name={icon}
-            size={24}
+            size={responsive.isMobile ? 20 : 24}
             color={color}
-            style={styles.iconContainer}
           />
         )}
       </View>
-      
-      <View style={styles.content}>
-        <Text style={[styles.value, { color: MaterialColors.neutral[900] }]}>
+
+      <View style={styles.valueContainer}>
+        <Text style={[styles.value, dynamicStyles.value, { color: MaterialColors.onSurface }]} numberOfLines={1}>
           {typeof value === 'number' ? value.toLocaleString() : value}
         </Text>
-        
         {subtitle && (
-          <Text style={[styles.subtitle, { color: MaterialColors.neutral[600] }]} numberOfLines={1}>
+          <Text style={[styles.subtitle, dynamicStyles.subtitle]} numberOfLines={1}>
             {subtitle}
           </Text>
         )}
       </View>
-      
-      {trend && (
-        <View style={styles.trend}>
-          <Text style={[styles.trendIcon, { color: getTrendColor() }]}>
-            <StatusIcon
-              name={getTrendIcon()}
-              size={16}
-              color={getTrendColor()}
-              state={trend === 'up' ? 'success' : trend === 'down' ? 'error' : 'default'}
-            />
-          </Text>
-          <Text style={[styles.trendValue, { color: getTrendColor() }]}>
-            {Math.abs(trend.value)}%
-          </Text>
-          <Text style={[styles.trendLabel, { color: MaterialColors.neutral[600] }]}>
-            {trend.isPositive ? 'increase' : 'decrease'}
+
+      {trendValue && (
+        <View style={styles.trendRow}>
+          <StatusIcon
+            name={getTrendIcon()}
+            size={16}
+            color={getTrendColor()}
+            state={trend === 'up' ? 'success' : trend === 'down' ? 'error' : 'default'}
+          />
+          <Text style={[styles.trendValue, dynamicStyles.trendValue, { color: getTrendColor() }]}>
+            {trendValue}
           </Text>
         </View>
       )}
@@ -122,24 +154,14 @@ const MaterialKPICard: React.FC<MaterialKPICardProps> = ({
         onPressOut={handlePressOut}
         activeOpacity={0.9}
       >
-        <Animated.View
-          style={[
-            styles.animatedContainer,
-            { transform: [{ scale: scaleValue }] },
-            getElevationStyle(elevation),
-          ]}
-        >
-          <CardContent />
+        <Animated.View style={{ transform: [{ scale: scaleValue }] }}>
+          {content}
         </Animated.View>
       </TouchableOpacity>
     );
   }
 
-  return (
-    <View style={[styles.container, getElevationStyle(elevation)]}>
-      <CardContent />
-    </View>
-  );
+  return content;
 };
 
 const getElevationStyle = (level: number) => {
@@ -151,62 +173,46 @@ const getElevationStyle = (level: number) => {
     4: MaterialElevation.level4,
     5: MaterialElevation.level5,
   };
+
   return elevations[level as keyof typeof elevations] || MaterialElevation.level1;
 };
 
 const styles = StyleSheet.create({
-  container: {
-    borderRadius: 12,
-    padding: MaterialSpacing.md,
-    margin: MaterialSpacing.xs,
-    minWidth: 140,
-    minHeight: 100,
-  },
-  animatedContainer: {
-    borderRadius: 12,
-    overflow: 'hidden',
+  card: {
+    backgroundColor: MaterialColors.surface,
+    borderRadius: MaterialShape.large,
+    gap: MaterialSpacing.sm,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: MaterialSpacing.sm,
+    justifyContent: 'space-between',
+    gap: MaterialSpacing.sm,
   },
   title: {
     ...MaterialTypography.labelMedium,
-    flex: 1,
-    marginRight: MaterialSpacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  icon: {
-    fontSize: 20,
-  },
-  content: {
-    marginBottom: MaterialSpacing.sm,
+  valueContainer: {
+    gap: 4,
   },
   value: {
     ...MaterialTypography.headlineSmall,
     fontWeight: '600',
-    marginBottom: 2,
   },
   subtitle: {
     ...MaterialTypography.bodySmall,
+    color: MaterialColors.neutral[600],
   },
-  trend: {
+  trendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: MaterialSpacing.xs,
-  },
-  trendIcon: {
-    ...MaterialTypography.bodySmall,
-    marginRight: 2,
+    gap: MaterialSpacing.xs,
   },
   trendValue: {
-    ...MaterialTypography.bodySmall,
+    ...MaterialTypography.labelMedium,
     fontWeight: '600',
-    marginRight: 4,
-  },
-  trendLabel: {
-    ...MaterialTypography.bodySmall,
   },
 });
 

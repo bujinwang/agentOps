@@ -21,6 +21,9 @@ export interface ResponsiveActions {
   getTouchTargetSize: (minSize?: number) => number;
   getResponsiveFontSize: (baseSize: number) => number;
   getResponsiveSpacing: (baseSpacing: number) => number;
+  getGridColumns: (config?: Partial<Record<'mobile' | 'tablet' | 'desktop', number>> & { default?: number }) => number;
+  getMaxContentWidth: (overrides?: Partial<Record<'mobile' | 'tablet' | 'desktop', number>>) => number;
+  getResponsivePadding: (basePadding: number, overrides?: Partial<Record<'mobile' | 'tablet' | 'desktop', number>>) => number;
 }
 
 // Hook for responsive design
@@ -62,6 +65,12 @@ export const useResponsive = (): ResponsiveState & ResponsiveActions => {
       responsiveDimensions.getResponsiveFontSize(baseSize), []),
     getResponsiveSpacing: useCallback((baseSpacing: number) =>
       responsiveDimensions.getResponsiveSpacing(baseSpacing), []),
+    getGridColumns: useCallback((config?: Partial<Record<'mobile' | 'tablet' | 'desktop', number>> & { default?: number }) =>
+      responsiveDimensions.getGridColumns(config ?? {}), []),
+    getMaxContentWidth: useCallback((overrides?: Partial<Record<'mobile' | 'tablet' | 'desktop', number>>) =>
+      responsiveDimensions.getMaxContentWidth(overrides ?? {}), []),
+    getResponsivePadding: useCallback((basePadding: number, overrides?: Partial<Record<'mobile' | 'tablet' | 'desktop', number>>) =>
+      responsiveDimensions.getResponsivePadding(basePadding, overrides ?? {}), []),
   };
 
   return {

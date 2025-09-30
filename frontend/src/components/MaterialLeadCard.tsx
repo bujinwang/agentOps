@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,28 +11,31 @@ import {
   MaterialElevation,
   MaterialSpacing,
   MaterialTypography,
-  MaterialShape
+  MaterialShape,
 } from '../styles/MaterialDesign';
 import { BusinessIcon } from './MaterialIcon';
+import { useResponsive } from '../hooks/useResponsive';
+
+interface LeadSummary {
+  leadId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber?: string;
+  budgetMin?: number;
+  budgetMax?: number;
+  desiredLocation?: string;
+  aiSummary?: string;
+  status: string;
+  priority: string;
+  score?: number;
+  scoreCategory?: 'High' | 'Medium' | 'Low';
+  scoreLastCalculated?: string;
+  createdAt: string;
+}
 
 interface MaterialLeadCardProps {
-  lead: {
-    leadId: number;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phoneNumber?: string;
-    budgetMin?: number;
-    budgetMax?: number;
-    desiredLocation?: string;
-    aiSummary?: string;
-    status: string;
-    priority: string;
-    score?: number;
-    scoreCategory?: 'High' | 'Medium' | 'Low';
-    scoreLastCalculated?: string;
-    createdAt: string;
-  };
+  lead: LeadSummary;
   onPress: () => void;
   elevation?: number;
   showScoreIndicator?: boolean;
@@ -44,11 +47,36 @@ const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
   elevation = 1,
   showScoreIndicator = true,
 }) => {
-  const scaleValue = new Animated.Value(1);
+  const responsive = useResponsive();
+  const scaleValue = useRef(new Animated.Value(1)).current;
+
+  const dynamicStyles = useMemo(() => ({
+    container: {
+      minHeight: responsive.getTouchTargetSize(120),
+      padding: responsive.getResponsivePadding(MaterialSpacing.lg, {
+        mobile: MaterialSpacing.md,
+        tablet: MaterialSpacing.lg,
+        desktop: MaterialSpacing.xl,
+      }),
+      borderRadius: MaterialShape.large,
+    },
+    name: {
+      fontSize: responsive.getResponsiveFontSize(18),
+    },
+    meta: {
+      fontSize: responsive.getResponsiveFontSize(13),
+    },
+    date: {
+      fontSize: responsive.getResponsiveFontSize(12),
+    },
+    flexBasis: responsive.isDesktop
+      ? `${100 / responsive.getGridColumns({ desktop: 3, tablet: 2, mobile: 1 })}%`
+      : '100%',
+  }), [responsive]);
 
   const handlePressIn = () => {
     Animated.spring(scaleValue, {
-      toValue: 0.98,
+      toValue: 0.97,
       useNativeDriver: true,
     }).start();
   };
@@ -56,8 +84,8 @@ const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
   const handlePressOut = () => {
     Animated.spring(scaleValue, {
       toValue: 1,
-      friction: 3,
-      tension: 40,
+      friction: 5,
+      tension: 80,
       useNativeDriver: true,
     }).start();
   };
@@ -72,27 +100,24 @@ const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
       'Closed Won': MaterialColors.secondary[700],
       'Closed Lost': MaterialColors.neutral[500],
       'Archived': MaterialColors.neutral[400],
-    };
-    return colors[status as keyof typeof colors] || MaterialColors.neutral[500];
+    } as const;
+    return colors[status as keyof typeof colors] ?? MaterialColors.neutral[500];
   };
 
   const getPriorityColor = (priority: string): string => {
     const colors = {
-      'High': MaterialColors.error[500],
-      'Medium': MaterialColors.warning[500],
-      'Low': MaterialColors.secondary[500],
-    };
-    return colors[priority as keyof typeof colors] || MaterialColors.neutral[500];
+      High: MaterialColors.error[500],
+      Medium: MaterialColors.warning[500],
+      Low: MaterialColors.secondary[500],
+    } as const;
+    return colors[priority as keyof typeof colors] ?? MaterialColors.neutral[500];
   };
 
   const getScoreColor = (score?: number, category?: string): string => {
     if (!score) return MaterialColors.neutral[400];
-
     if (category === 'High') return MaterialColors.secondary[600];
     if (category === 'Medium') return MaterialColors.warning[600];
     if (category === 'Low') return MaterialColors.error[600];
-
-    // Fallback based on score value
     if (score >= 80) return MaterialColors.secondary[600];
     if (score >= 60) return MaterialColors.warning[600];
     return MaterialColors.error[600];
@@ -100,7 +125,6 @@ const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
 
   const renderScoreIndicator = () => {
     if (!showScoreIndicator || !lead.score) return null;
-
     const scoreColor = getScoreColor(lead.score, lead.scoreCategory);
 
     return (
@@ -116,90 +140,84 @@ const MaterialLeadCard: React.FC<MaterialLeadCardProps> = ({
     );
   };
 
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('en-US', {
+  const formatCurrency = (value: number): string =>
+    new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
-  };
+
+  const cardContent = (
+    <Animated.View
+      style={[
+        styles.card,
+        dynamicStyles.container,
+        { transform: [{ scale: scaleValue }] },
+        getElevationStyle(elevation),
+        { flexBasis: dynamicStyles.flexBasis },
+      ]}
+    >
+      <View style={styles.header}>
+        <View style={styles.nameContainer}>
+          <Text style={[styles.name, dynamicStyles.name]} numberOfLines={1}>
+            {lead.firstName} {lead.lastName}
+          </Text>
+          <Text style={[styles.email, dynamicStyles.meta]} numberOfLines={1}>
+            {lead.email}
+          </Text>
+        </View>
+        <View style={styles.badgesContainer}>
+          <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(lead.priority) }]}>
+            <Text style={styles.badgeText}>{lead.priority}</Text>
+          </View>
+          {renderScoreIndicator()}
+        </View>
+      </View>
+
+      <View style={styles.metaSection}>
+        {lead.phoneNumber && (
+          <Text style={[styles.metaText, dynamicStyles.meta]} numberOfLines={1}>
+            📞 {lead.phoneNumber}
+          </Text>
+        )}
+        {(lead.budgetMin || lead.budgetMax) && (
+          <Text style={[styles.metaText, dynamicStyles.meta]} numberOfLines={1}>
+            💰 {formatCurrency(lead.budgetMin ?? 0)} - {formatCurrency(lead.budgetMax ?? 0)}
+          </Text>
+        )}
+        {lead.desiredLocation && (
+          <Text style={[styles.metaText, dynamicStyles.meta]} numberOfLines={1}>
+            📍 {lead.desiredLocation}
+          </Text>
+        )}
+        {lead.aiSummary && (
+          <Text style={[styles.aiSummary, dynamicStyles.meta]} numberOfLines={2}>
+            🤖 {lead.aiSummary}
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.footer}>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(lead.status) }]}>
+          <Text style={styles.badgeText}>{lead.status}</Text>
+        </View>
+        <Text style={[styles.date, dynamicStyles.date]}>
+          {new Date(lead.createdAt).toLocaleDateString()}
+        </Text>
+      </View>
+    </Animated.View>
+  );
 
   return (
     <TouchableOpacity
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      activeOpacity={0.9}
+      activeOpacity={0.92}
+      style={styles.touchWrapper}
     >
-      <Animated.View
-        style={[
-          styles.container,
-          { transform: [{ scale: scaleValue }] },
-          getElevationStyle(elevation),
-        ]}
-      >
-        {/* Header with Name, Priority, and Score */}
-        <View style={styles.header}>
-          <View style={styles.nameContainer}>
-            <Text style={styles.name} numberOfLines={1}>
-              {lead.firstName} {lead.lastName}
-            </Text>
-            <Text style={styles.email} numberOfLines={1}>
-              {lead.email}
-            </Text>
-          </View>
-          <View style={styles.badgesContainer}>
-            <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(lead.priority) }]}>
-              <Text style={styles.priorityText}>{lead.priority}</Text>
-            </View>
-            {renderScoreIndicator()}
-          </View>
-        </View>
-
-        {/* Contact Information */}
-        {lead.phoneNumber && (
-          <Text style={styles.phone} numberOfLines={1}>
-            📞 {lead.phoneNumber}
-          </Text>
-        )}
-
-        {/* Budget Information */}
-        {(lead.budgetMin || lead.budgetMax) && (
-          <Text style={styles.budget} numberOfLines={1}>
-            💰 {formatCurrency(lead.budgetMin || 0)} - {formatCurrency(lead.budgetMax || 0)}
-          </Text>
-        )}
-
-        {/* Location */}
-        {lead.desiredLocation && (
-          <Text style={styles.location} numberOfLines={1}>
-            📍 {lead.desiredLocation}
-          </Text>
-        )}
-
-        {/* AI Summary */}
-        {lead.aiSummary && (
-          <View style={styles.aiContainer}>
-            <BusinessIcon
-              name="smart_toy"
-              size={16}
-              color={MaterialColors.secondary[500]}
-              state="active"
-            />
-          </View>
-        )}
-
-        {/* Footer with Status and Date */}
-        <View style={styles.footer}>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(lead.status) }]}>
-            <Text style={styles.statusText}>{lead.status}</Text>
-          </View>
-          <Text style={styles.date}>
-            {new Date(lead.createdAt).toLocaleDateString()}
-          </Text>
-        </View>
-      </Animated.View>
+      {cardContent}
     </TouchableOpacity>
   );
 };
@@ -217,41 +235,42 @@ const getElevationStyle = (level: number) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  touchWrapper: {
+    flexGrow: 1,
+  },
+  card: {
     backgroundColor: MaterialColors.surface,
-    borderRadius: 12,
-    padding: MaterialSpacing.md,
-    marginHorizontal: MaterialSpacing.sm,
-    marginVertical: MaterialSpacing.xs,
+    gap: MaterialSpacing.md,
   },
   header: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: MaterialSpacing.sm,
+    gap: MaterialSpacing.md,
   },
   nameContainer: {
     flex: 1,
-    marginRight: MaterialSpacing.sm,
-  },
-  badgesContainer: {
-    alignItems: 'flex-end',
+    gap: 2,
   },
   name: {
     ...MaterialTypography.titleMedium,
-    color: MaterialColors.neutral[900],
-    marginBottom: 2,
+    color: MaterialColors.onSurface,
   },
   email: {
     ...MaterialTypography.bodySmall,
     color: MaterialColors.neutral[600],
   },
+  badgesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: MaterialSpacing.sm,
+  },
   priorityBadge: {
+    borderRadius: MaterialShape.full,
     paddingHorizontal: MaterialSpacing.sm,
     paddingVertical: MaterialSpacing.xs,
-    borderRadius: 12,
   },
-  priorityText: {
+  badgeText: {
     ...MaterialTypography.labelSmall,
     color: MaterialColors.onPrimary,
     fontWeight: '600',
@@ -259,75 +278,41 @@ const styles = StyleSheet.create({
   scoreBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: MaterialSpacing.xs,
+    borderRadius: MaterialShape.full,
     paddingHorizontal: MaterialSpacing.sm,
     paddingVertical: MaterialSpacing.xs,
-    borderRadius: 12,
-    marginTop: MaterialSpacing.xs,
+    backgroundColor: MaterialColors.secondary[500],
   },
   scoreText: {
     ...MaterialTypography.labelSmall,
     color: MaterialColors.onPrimary,
     fontWeight: '600',
-    marginLeft: MaterialSpacing.xs,
   },
-  phone: {
-    ...MaterialTypography.bodyMedium,
+  metaSection: {
+    gap: 4,
+  },
+  metaText: {
+    ...MaterialTypography.bodySmall,
     color: MaterialColors.neutral[700],
-    marginBottom: MaterialSpacing.xs,
-  },
-  budget: {
-    ...MaterialTypography.bodyMedium,
-    color: MaterialColors.secondary[600],
-    fontWeight: '500',
-    marginBottom: MaterialSpacing.xs,
-  },
-  location: {
-    ...MaterialTypography.bodyMedium,
-    color: MaterialColors.neutral[600],
-    marginBottom: MaterialSpacing.sm,
-  },
-  aiContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: MaterialColors.secondary[50],
-    paddingHorizontal: MaterialSpacing.sm,
-    paddingVertical: MaterialSpacing.xs,
-    borderRadius: MaterialShape.small,
-    marginTop: MaterialSpacing.sm,
-  },
-  aiIcon: {
-    fontSize: 14,
-    marginRight: MaterialSpacing.xs,
   },
   aiSummary: {
     ...MaterialTypography.bodySmall,
-    color: MaterialColors.neutral[700],
-    fontStyle: 'italic',
-    flex: 1,
-    lineHeight: 18,
+    color: MaterialColors.secondary[600],
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: MaterialSpacing.sm,
-    paddingTop: MaterialSpacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: MaterialColors.neutral[200],
   },
   statusBadge: {
+    borderRadius: MaterialShape.full,
     paddingHorizontal: MaterialSpacing.sm,
     paddingVertical: MaterialSpacing.xs,
-    borderRadius: 12,
-  },
-  statusText: {
-    ...MaterialTypography.labelSmall,
-    color: MaterialColors.onPrimary,
-    fontWeight: '600',
   },
   date: {
     ...MaterialTypography.labelSmall,
-    color: MaterialColors.neutral[500],
+    color: MaterialColors.neutral[600],
   },
 });
 

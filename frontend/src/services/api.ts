@@ -432,10 +432,47 @@ class ApiService {
     });
   }
 
+  async getTasksWithLoading(
+    params?: {
+      completed?: boolean;
+      priority?: string;
+      leadId?: number;
+      limit?: number;
+      offset?: number;
+    },
+    loadingCallbacks?: LoadingCallbacks
+  ): Promise<{ data: Task[] }> {
+    const searchParams = new URLSearchParams();
+
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/api/tasks${queryString ? `?${queryString}` : ''}`;
+
+    return this.request(endpoint, {
+      method: 'GET',
+    }, loadingCallbacks);
+  }
+
   async getTask(taskId: number): Promise<{ data: Task }> {
     return this.request(`/api/tasks/${taskId}`, {
       method: 'GET',
     });
+  }
+
+  async getTaskWithLoading(
+    taskId: number,
+    loadingCallbacks?: LoadingCallbacks
+  ): Promise<{ data: Task }> {
+    return this.request(`/api/tasks/${taskId}`, {
+      method: 'GET',
+    }, loadingCallbacks);
   }
 
   async createTask(taskData: TaskForm): Promise<ApiResponse<Task>> {
@@ -445,6 +482,16 @@ class ApiService {
     });
   }
 
+  async createTaskWithLoading(
+    taskData: TaskForm,
+    loadingCallbacks?: LoadingCallbacks
+  ): Promise<ApiResponse<Task>> {
+    return this.request('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify(taskData),
+    }, loadingCallbacks);
+  }
+
   async updateTask(taskId: number, taskData: Partial<Task>): Promise<ApiResponse<Task>> {
     return this.request(`/api/tasks/${taskId}`, {
       method: 'PUT',
@@ -452,10 +499,30 @@ class ApiService {
     });
   }
 
+  async updateTaskWithLoading(
+    taskId: number,
+    taskData: Partial<Task>,
+    loadingCallbacks?: LoadingCallbacks
+  ): Promise<ApiResponse<Task>> {
+    return this.request(`/api/tasks/${taskId}`, {
+      method: 'PUT',
+      body: JSON.stringify(taskData),
+    }, loadingCallbacks);
+  }
+
   async deleteTask(taskId: number): Promise<ApiResponse> {
     return this.request(`/api/tasks/${taskId}`, {
       method: 'DELETE',
     });
+  }
+
+  async deleteTaskWithLoading(
+    taskId: number,
+    loadingCallbacks?: LoadingCallbacks
+  ): Promise<ApiResponse> {
+    return this.request(`/api/tasks/${taskId}`, {
+      method: 'DELETE',
+    }, loadingCallbacks);
   }
 
   // Interactions endpoints
@@ -506,6 +573,8 @@ class ApiService {
 
   // Analytics endpoints
   async getDashboardStats(): Promise<{
+    status: string;
+    message: string;
     data: {
       totalLeads: number;
       newLeads: number;
@@ -515,13 +584,16 @@ class ApiService {
       conversionRate: number;
       recentActivity: Interaction[];
     };
+    timestamp: string;
   }> {
-    return this.request('/webhook/analytics/dashboard', {
+    return this.request('/api/analytics/dashboard', {
       method: 'GET',
     });
   }
 
   async getDashboardStatsWithLoading(loadingCallbacks?: LoadingCallbacks): Promise<{
+    status: string;
+    message: string;
     data: {
       totalLeads: number;
       newLeads: number;
@@ -531,21 +603,25 @@ class ApiService {
       conversionRate: number;
       recentActivity: Interaction[];
     };
+    timestamp: string;
   }> {
-    return this.request('/webhook/analytics/dashboard', {
+    return this.request('/api/analytics/dashboard', {
       method: 'GET',
     }, loadingCallbacks);
   }
 
   async getLeadStats(timeframe: 'week' | 'month' | 'quarter' = 'month'): Promise<{
+    status: string;
+    message: string;
     data: {
       leadsByStatus: Array<{ status: string; count: number }>;
       leadsBySource: Array<{ source: string; count: number }>;
       leadsByPriority: Array<{ priority: string; count: number }>;
       leadsOverTime: Array<{ date: string; count: number }>;
     };
+    timestamp: string;
   }> {
-    return this.request(`/webhook/analytics/leads?timeframe=${timeframe}`, {
+    return this.request(`/api/analytics/leads?timeframe=${timeframe}`, {
       method: 'GET',
     });
   }

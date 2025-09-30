@@ -135,27 +135,106 @@ export const useLoadingState = (initialState: Partial<LoadingState> = {}) => {
 // Hook for managing multiple loading states
 export const useMultiLoadingState = () => {
   const [loadingStates, setLoadingStates] = useState<Record<string, LoadingState>>({});
+  const timeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const retryCountsRef = useRef<Record<string, number>>({});
 
-  const createLoader = useCallback((key: string) => {
-    const loader = useLoadingState();
-
-    useEffect(() => {
-      setLoadingStates(prev => ({
-        ...prev,
-        [key]: {
-          isLoading: loader.isLoading,
-          error: loader.error,
-          progress: loader.progress,
-          message: loader.message,
-        },
-      }));
-    }, [loader.isLoading, loader.error, loader.progress, loader.message]);
-
-    return loader;
+  const clearTimeoutForKey = useCallback((key: string) => {
+    const timeout = timeoutsRef.current[key];
+    if (timeout) {
+      clearTimeout(timeout);
+      delete timeoutsRef.current[key];
+    }
   }, []);
 
+  const updateState = useCallback((
+    key: string,
+    updater: Partial<LoadingState> | ((current: LoadingState) => LoadingState)
+  ) => {
+    setLoadingStates(prev => {
+      const current = prev[key] ?? { isLoading: false, error: null };
+      const nextState = typeof updater === 'function'
+        ? (updater as (current: LoadingState) => LoadingState)(current)
+        : { ...current, ...updater };
+
+      return {
+        ...prev,
+        [key]: nextState,
+      };
+    });
+  }, []);
+
+  const startLoading = useCallback((key: string, message?: string, options: LoadingOptions = {}) => {
+    clearTimeoutForKey(key);
+    retryCountsRef.current[key] = 0;
+
+    updateState(key, {
+      isLoading: true,
+      error: null,
+      message,
+      progress: options.showProgress ? 0 : undefined,
+    });
+
+    if (options.timeout) {
+      timeoutsRef.current[key] = setTimeout(() => {
+        updateState(key, {
+          isLoading: false,
+          error: 'Operation timed out',
+        });
+        options.onTimeout?.();
+      }, options.timeout);
+    }
+  }, [clearTimeoutForKey, updateState]);
+
+  const updateProgress = useCallback((key: string, progress: number, message?: string) => {
+    updateState(key, current => ({
+      ...current,
+      progress,
+      message: message ?? current.message,
+    }));
+  }, [updateState]);
+
+  const stopLoading = useCallback((key: string) => {
+    clearTimeoutForKey(key);
+    updateState(key, {
+      isLoading: false,
+      progress: undefined,
+      message: undefined,
+    });
+  }, [clearTimeoutForKey, updateState]);
+
+  const setError = useCallback((key: string, error: string, options: LoadingOptions = {}) => {
+    clearTimeoutForKey(key);
+    updateState(key, {
+      isLoading: false,
+      error,
+      progress: undefined,
+    });
+
+    if (options.retryCount && retryCountsRef.current[key] < options.retryCount) {
+      retryCountsRef.current[key] += 1;
+      options.onRetry?.();
+    }
+  }, [clearTimeoutForKey, updateState]);
+
+  const retry = useCallback((key: string, message?: string) => {
+    updateState(key, {
+      isLoading: true,
+      error: null,
+      message,
+    });
+  }, [updateState]);
+
+  const reset = useCallback((key: string) => {
+    clearTimeoutForKey(key);
+    setLoadingStates(prev => {
+      const { [key]: _removed, ...rest } = prev;
+      return rest;
+    });
+    delete retryCountsRef.current[key];
+  }, [clearTimeoutForKey]);
+
   const getLoadingState = useCallback((key: string): LoadingState => {
-    return loadingStates[key] || { isLoading: false, error: null };
+    return loadingStates[key] ?? { isLoading: false, error: null };
   }, [loadingStates]);
 
   const isAnyLoading = useCallback(() => {
@@ -164,13 +243,26 @@ export const useMultiLoadingState = () => {
 
   const getAllErrors = useCallback(() => {
     return Object.entries(loadingStates)
-      .filter(([, state]) => state.error)
+      .filter(([, state]) => Boolean(state.error))
       .map(([key, state]) => ({ key, error: state.error! }));
   }, [loadingStates]);
 
+  useEffect(() => {
+    return () => {
+      Object.values(timeoutsRef.current).forEach(timeout => clearTimeout(timeout));
+      timeoutsRef.current = {};
+      retryCountsRef.current = {};
+    };
+  }, []);
+
   return {
     loadingStates,
-    createLoader,
+    startLoading,
+    updateProgress,
+    stopLoading,
+    setError,
+    retry,
+    reset,
     getLoadingState,
     isAnyLoading,
     getAllErrors,
