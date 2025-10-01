@@ -1,6 +1,6 @@
 // Task detail screen with edit and completion tracking
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import { Task, TaskPriority } from '../../types';
 import { apiService } from '../../services/api';
 import { useLoadingState } from '../../utils/loadingState';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 import { TaskDetailSkeleton } from '../../components/common/SkeletonCard';
 import { InlineLoader } from '../../components/common/LoadingIndicator';
 
@@ -27,6 +28,11 @@ interface TaskDetailScreenProps {
 
 const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({ route, navigation }) => {
   const { taskId } = route.params;
+  const { containerStyle, responsive, theme } = useScreenLayout();
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+  }), [responsive]);
   const [task, setTask] = useState<Task | null>(null);
   const loadingState = useLoadingState({ isLoading: true });
   const mutationLoadingState = useLoadingState();

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { apiService } from '../../services/api';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 import { LeadStatus, LeadPriority, PropertyType } from '../../types';
 
 interface ExportLeadsScreenProps {
@@ -28,6 +29,11 @@ interface ExportFilters {
 }
 
 const ExportLeadsScreen: React.FC<ExportLeadsScreenProps> = ({ navigation }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(48) },
+  }), [responsive]);
   const [exportFormat, setExportFormat] = useState<'csv' | 'excel'>('csv');
   const [isExporting, setIsExporting] = useState(false);
   const [filters, setFilters] = useState<ExportFilters>({});

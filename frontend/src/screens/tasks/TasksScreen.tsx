@@ -14,6 +14,7 @@ import {
 import { Task, TaskPriority } from '../../types';
 import { apiService } from '../../services/api';
 import { useLoadingState } from '../../utils/loadingState';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 import { TaskListSkeleton } from '../../components/common/SkeletonList';
 import SkeletonCard from '../../components/common/SkeletonCard';
 import { InlineLoader } from '../../components/common/LoadingIndicator';
@@ -28,6 +29,8 @@ interface TasksScreenProps {
 }
 
 const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
+  const { containerStyle, responsive, theme } = useScreenLayout();
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed' | 'overdue'>('all');
   const [togglingTaskId, setTogglingTaskId] = useState<number | null>(null);
@@ -36,6 +39,11 @@ const TasksScreen: React.FC<TasksScreenProps> = ({ navigation }) => {
   const initialLoadingState = useLoadingState({ isLoading: true });
   const refreshLoadingState = useLoadingState();
   const mutationLoadingState = useLoadingState();
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    input: { minHeight: responsive.getTouchTargetSize(48) },
+  }), [responsive]);
 
   const taskFilters = useMemo(() => ([
     { key: 'all', label: 'All' },

@@ -1,6 +1,6 @@
 // Enhanced lead creation form with Material Design UX improvements
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,12 +21,17 @@ import { validateLeadForm, getErrorMessage, hasError, parseCurrency } from '../.
 import MaterialTextField from '../../components/MaterialTextField';
 import { MaterialColors, MaterialSpacing, MaterialTypography, MaterialShape, MaterialElevation } from '../../styles/MaterialDesign';
 import { ActionIcon } from '../../components/MaterialIcon';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface AddLeadScreenProps {
   navigation: any;
 }
 
 const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout({
+    maxWidth: { tablet: 720, desktop: 960 },
+  });
+
   const [formData, setFormData] = useState<LeadForm>({
     firstName: '',
     lastName: '',
@@ -47,6 +52,22 @@ const AddLeadScreen: React.FC<AddLeadScreenProps> = ({ navigation }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPropertyDetails, setShowPropertyDetails] = useState(false);
   const [validationStatus, setValidationStatus] = useState<Record<string, 'idle' | 'valid' | 'invalid'>>({});
+
+  const dynamicStyles = useMemo(() => ({
+    sectionTitle: {
+      fontSize: responsive.getResponsiveFontSize(18),
+    },
+    input: {
+      minHeight: responsive.getTouchTargetSize(48),
+    },
+    button: {
+      minHeight: responsive.getTouchTargetSize(48),
+      paddingHorizontal: responsive.getResponsiveSpacing(24),
+    },
+    toggleButton: {
+      minHeight: responsive.getTouchTargetSize(44),
+    },
+  }), [responsive]);
 
   const scrollViewRef = useRef<ScrollView>(null);
 

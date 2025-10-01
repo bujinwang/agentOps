@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import DocumentPicker, { DocumentPickerResponse } from 'react-native-document-picker';
 import { apiService } from '../../services/api';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface ImportLeadsScreenProps {
   navigation: any;
@@ -23,6 +24,11 @@ interface ImportResult {
 }
 
 const ImportLeadsScreen: React.FC<ImportLeadsScreenProps> = ({ navigation }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(48) },
+  }), [responsive]);
   const [selectedFile, setSelectedFile] = useState<DocumentPickerResponse | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);

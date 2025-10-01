@@ -1,6 +1,6 @@
 // Edit lead screen - similar to AddLeadScreen but pre-populated
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { Picker } from '@react-native-picker/picker';
 import { LeadForm, PropertyType, Lead } from '../../types';
 import { apiService } from '../../services/api';
 import { validateLeadForm, getErrorMessage, hasError, parseCurrency } from '../../utils/validation';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface EditLeadScreenProps {
   route: {
@@ -31,8 +32,16 @@ interface EditLeadScreenProps {
 
 const EditLeadScreen: React.FC<EditLeadScreenProps> = ({ route, navigation }) => {
   const { leadId } = route.params;
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout({
+    maxWidth: { tablet: 720, desktop: 960 },
+  });
   const [lead, setLead] = useState<Lead | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const dynamicStyles = useMemo(() => ({
+    input: { minHeight: responsive.getTouchTargetSize(48) },
+    button: { minHeight: responsive.getTouchTargetSize(48) },
+  }), [responsive]);
 
   const [formData, setFormData] = useState<LeadForm>({
     firstName: '',

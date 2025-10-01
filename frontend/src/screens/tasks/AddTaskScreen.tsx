@@ -1,6 +1,6 @@
 // Add new task screen
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { Picker } from '@react-native-picker/picker';
 import { TaskForm, TaskPriority, Lead } from '../../types';
 import { apiService } from '../../services/api';
 import { validateTaskForm, getErrorMessage, hasError } from '../../utils/validation';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface AddTaskScreenProps {
   route?: {
@@ -31,6 +32,12 @@ interface AddTaskScreenProps {
 const AddTaskScreen: React.FC<AddTaskScreenProps> = ({ route, navigation }) => {
   const leadId = route?.params?.leadId;
   const leadName = route?.params?.leadName;
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
+
+  const dynamicStyles = useMemo(() => ({
+    input: { minHeight: responsive.getTouchTargetSize(48) },
+    button: { minHeight: responsive.getTouchTargetSize(48) },
+  }), [responsive]);
 
   const [formData, setFormData] = useState<TaskForm>({
     title: '',

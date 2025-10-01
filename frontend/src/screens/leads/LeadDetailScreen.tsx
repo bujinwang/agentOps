@@ -1,6 +1,6 @@
 // Lead detail screen with enhanced Material Design layout and interactions
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import { BusinessIcon } from '../../components/MaterialIcon';
 import { useLoadingState } from '../../utils/loadingState';
 import { LeadDetailSkeleton } from '../../components/common/SkeletonCard';
 import { InlineLoader } from '../../components/common/LoadingIndicator';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -40,6 +41,12 @@ interface LeadDetailScreenProps {
 
 const LeadDetailScreen: React.FC<LeadDetailScreenProps> = ({ route, navigation }) => {
   const { leadId } = route.params;
+  const { containerStyle, responsive, theme } = useScreenLayout();
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    text: { fontSize: responsive.getResponsiveFontSize(16) },
+  }), [responsive]);
   const [lead, setLead] = useState<Lead | null>(null);
   const loadingState = useLoadingState({ isLoading: true });
   const mutationLoadingState = useLoadingState();
