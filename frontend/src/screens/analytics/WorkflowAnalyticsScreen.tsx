@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { MaterialColors, MaterialSpacing, MaterialTypography } from '../../styles/MaterialDesign';
 import { apiService } from '../../services/api';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface AnalyticsOverview {
   totalWorkflows: number;
@@ -50,11 +51,18 @@ interface ResponseRate {
 }
 
 const WorkflowAnalyticsScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [workflowPerformance, setWorkflowPerformance] = useState<WorkflowPerformance[]>([]);
   const [responseRates, setResponseRates] = useState<ResponseRate[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const dynamicStyles = useMemo(() => ({
+    refreshButton: { minHeight: responsive.getTouchTargetSize(36) },
+    metric: { width: responsive.getMetricCardWidth(2, MaterialSpacing.md) },
+    cardPadding: { padding: responsive.getSpacing(MaterialSpacing.md) },
+  }), [responsive]);
 
   useEffect(() => {
     loadAnalytics();
@@ -87,26 +95,26 @@ const WorkflowAnalyticsScreen: React.FC = () => {
     if (!overview) return null;
 
     return (
-      <View style={styles.overviewCard}>
+      <View style={[styles.overviewCard, dynamicStyles.cardPadding]}>
         <Text style={styles.cardTitle}>Workflow Overview</Text>
 
         <View style={styles.metricsGrid}>
-          <View style={styles.metric}>
+          <View style={[styles.metric, dynamicStyles.metric]}>
             <Text style={styles.metricValue}>{overview.totalWorkflows}</Text>
             <Text style={styles.metricLabel}>Active Workflows</Text>
           </View>
 
-          <View style={styles.metric}>
+          <View style={[styles.metric, dynamicStyles.metric]}>
             <Text style={styles.metricValue}>{overview.totalExecutions}</Text>
             <Text style={styles.metricLabel}>Total Executions</Text>
           </View>
 
-          <View style={styles.metric}>
+          <View style={[styles.metric, dynamicStyles.metric]}>
             <Text style={styles.metricValue}>{overview.completedExecutions}</Text>
             <Text style={styles.metricLabel}>Completed</Text>
           </View>
 
-          <View style={styles.metric}>
+          <View style={[styles.metric, dynamicStyles.metric]}>
             <Text style={styles.metricValue}>{overview.conversionRate}%</Text>
             <Text style={styles.metricLabel}>Conversion Rate</Text>
           </View>
@@ -131,7 +139,7 @@ const WorkflowAnalyticsScreen: React.FC = () => {
     if (workflowPerformance.length === 0) return null;
 
     return (
-      <View style={styles.sectionCard}>
+      <View style={[styles.sectionCard, dynamicStyles.cardPadding]}>
         <Text style={styles.cardTitle}>Workflow Performance</Text>
 
         {workflowPerformance.map((workflow) => (
@@ -178,7 +186,7 @@ const WorkflowAnalyticsScreen: React.FC = () => {
     if (responseRates.length === 0) return null;
 
     return (
-      <View style={styles.sectionCard}>
+      <View style={[styles.sectionCard, dynamicStyles.cardPadding]}>
         <Text style={styles.cardTitle}>Response Rates by Channel</Text>
 
         {responseRates.map((rate) => (
@@ -223,15 +231,15 @@ const WorkflowAnalyticsScreen: React.FC = () => {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, containerStyle]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
       }
     >
-      <View style={styles.header}>
+      <View style={[styles.header, contentStyle]}>
         <Text style={styles.headerTitle}>Workflow Analytics</Text>
         <TouchableOpacity
-          style={styles.refreshButton}
+          style={[styles.refreshButton, dynamicStyles.refreshButton]}
           onPress={handleRefresh}
         >
           <Text style={styles.refreshButtonText}>Refresh</Text>

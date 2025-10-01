@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { Picker } from '@react-native-picker/picker';
 import { useSettings } from '../../contexts/SettingsContext';
 import { validateEmail, formatPhoneNumber } from '../../utils/validation';
 import { apiService } from '../../services/api';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface ProfileSettingsScreenProps {
   navigation: any;
@@ -36,7 +37,13 @@ interface PasswordFormData {
 }
 
 const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ navigation }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const { profile, updateProfile } = useSettings();
+
+  const dynamicStyles = useMemo(() => ({
+    input: { minHeight: responsive.getTouchTargetSize(48) },
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+  }), [responsive]);
   
   const [formData, setFormData] = useState<ProfileFormData>({
     firstName: '',

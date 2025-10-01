@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,6 +9,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useProperties } from '../hooks/useProperties';
 import PropertyForm from '../components/PropertyForm';
 import { PropertyCreate, PropertyUpdate } from '../types/property';
+import { useScreenLayout } from '../hooks/useScreenLayout';
 
 type FormMode = 'create' | 'edit';
 
@@ -18,9 +19,14 @@ interface RouteParams {
 }
 
 const PropertyFormScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const navigation = useNavigation();
   const route = useRoute();
   const { mode, property: routeProperty } = route.params as RouteParams;
+
+  const dynamicStyles = useMemo(() => ({
+    container: containerStyle,
+  }), [containerStyle]);
 
   const {
     createProperty,

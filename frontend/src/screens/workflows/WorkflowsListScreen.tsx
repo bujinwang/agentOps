@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { MaterialColors, MaterialSpacing, MaterialTypography } from '../../styles/MaterialDesign';
 import { apiService } from '../../services/api';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface Workflow {
   workflow_id: number;
@@ -24,10 +25,19 @@ interface Workflow {
 }
 
 const WorkflowsListScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    workflowCard: { 
+      minHeight: responsive.getTouchTargetSize(100),
+      padding: responsive.getSpacing(12),
+    },
+  }), [responsive]);
 
   useEffect(() => {
     loadWorkflows();

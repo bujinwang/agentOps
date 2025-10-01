@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { Picker } from '@react-native-picker/picker';
 import { apiService } from '../../services/api';
 import { Lead, Task, LeadStatus, LeadPriority, TaskPriority } from '../../types';
 import { formatCurrency, formatDate, getRelativeTime } from '../../utils/validation';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface SearchScreenProps {
   navigation: any;
@@ -35,6 +36,7 @@ interface SearchFilters {
 }
 
 const SearchScreen: React.FC<SearchScreenProps> = ({ navigation }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState<SearchType>('leads');
   const [searchResults, setSearchResults] = useState<(Lead | Task)[]>([]);
@@ -45,6 +47,16 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation }) => {
     tasks: {},
   });
   const [showFilters, setShowFilters] = useState(false);
+
+  const dynamicStyles = useMemo(() => ({
+    searchInput: { minHeight: responsive.getTouchTargetSize(48) },
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    typeToggle: { minHeight: responsive.getTouchTargetSize(40) },
+    resultCard: { 
+      minHeight: responsive.getTouchTargetSize(100),
+      padding: responsive.getSpacing(12),
+    },
+  }), [responsive]);
 
   const performSearch = useCallback(async (query: string, refresh = false) => {
     if (!query.trim()) {
@@ -257,7 +269,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation }) => {
 
   const renderLeadItem = ({ item }: { item: Lead }) => (
     <TouchableOpacity
-      style={styles.resultCard}
+      style={[styles.resultCard, dynamicStyles.resultCard]}
       onPress={() => navigation.navigate('LeadDetail', { leadId: item.leadId })}
     >
       <View style={styles.resultHeader}>
@@ -288,7 +300,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation }) => {
 
   const renderTaskItem = ({ item }: { item: Task }) => (
     <TouchableOpacity
-      style={styles.resultCard}
+      style={[styles.resultCard, dynamicStyles.resultCard]}
       onPress={() => navigation.navigate('TaskDetail', { taskId: item.taskId })}
     >
       <View style={styles.resultHeader}>
@@ -376,9 +388,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, contentStyle]}>
         <Text style={styles.headerTitle}>Search</Text>
         <Text style={styles.headerSubtitle}>Find leads and tasks quickly</Text>
       </View>

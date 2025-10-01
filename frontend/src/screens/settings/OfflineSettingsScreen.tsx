@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,20 @@ import {
 } from 'react-native';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { formatDate, formatDateTime } from '../../utils/validation';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface OfflineSettingsScreenProps {
   navigation: any;
 }
 
 const OfflineSettingsScreen: React.FC<OfflineSettingsScreenProps> = ({ navigation }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const { status, syncNow, clearOfflineData, getStorageInfo } = useOfflineSync();
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    settingRow: { minHeight: responsive.getTouchTargetSize(56) },
+  }), [responsive]);
   const [storageInfo, setStorageInfo] = useState<{ totalSize: number; breakdown: Record<string, number> } | null>(null);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [wifiOnlySync, setWifiOnlySync] = useState(false);

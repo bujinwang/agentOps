@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,6 +13,7 @@ import MediaUpload from '../components/MediaUpload';
 import MediaGallery from '../components/MediaGallery';
 import MediaViewer from '../components/MediaViewer';
 import { PropertyMedia } from '../types/property';
+import { useScreenLayout } from '../hooks/useScreenLayout';
 
 interface RouteParams {
   propertyId: number;
@@ -20,9 +21,14 @@ interface RouteParams {
 }
 
 const MediaManagementScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const navigation = useNavigation();
   const route = useRoute();
   const { propertyId, propertyTitle } = route.params as RouteParams;
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+  }), [responsive]);
 
   const [media, setMedia] = useState<PropertyMedia[]>([]);
   const [primaryMediaId, setPrimaryMediaId] = useState<number | undefined>();

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,10 +8,16 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import PropertyList from '../components/PropertyList';
 import { Property } from '../types/property';
+import { useScreenLayout } from '../hooks/useScreenLayout';
 
 const PropertyListScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const navigation = useNavigation();
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const dynamicStyles = useMemo(() => ({
+    container: containerStyle,
+  }), [containerStyle]);
 
   const handlePropertyPress = (property: Property) => {
     // Navigate to property detail screen

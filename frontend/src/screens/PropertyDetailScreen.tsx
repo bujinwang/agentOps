@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,11 +9,17 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useProperties } from '../hooks/useProperties';
 import PropertyDetail from '../components/PropertyDetail';
 import { Property, PropertyMedia } from '../types/property';
+import { useScreenLayout } from '../hooks/useScreenLayout';
 
 const PropertyDetailScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const navigation = useNavigation();
   const route = useRoute();
   const { property: initialProperty } = route.params as { property: Property };
+
+  const dynamicStyles = useMemo(() => ({
+    container: containerStyle,
+  }), [containerStyle]);
 
   const {
     currentProperty,

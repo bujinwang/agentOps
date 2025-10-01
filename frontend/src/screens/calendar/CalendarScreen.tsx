@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { Calendar, DateData } from 'react-native-calendars';
 import { apiService } from '../../services/api';
 import { Task, Interaction } from '../../types';
 import { formatDate, formatDateTime, getRelativeTime } from '../../utils/validation';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface CalendarScreenProps {
   navigation: any;
@@ -41,6 +42,7 @@ interface MarkedDates {
 }
 
 const CalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [dayEvents, setDayEvents] = useState<CalendarEvent[]>([]);
@@ -48,6 +50,15 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'agenda'>('month');
+
+  const dynamicStyles = useMemo(() => ({
+    addButton: { minHeight: responsive.getTouchTargetSize(44) },
+    viewModeButton: { minHeight: responsive.getTouchTargetSize(36) },
+    eventCard: { 
+      minHeight: responsive.getTouchTargetSize(80),
+      padding: responsive.getSpacing(12),
+    },
+  }), [responsive]);
 
   useEffect(() => {
     loadCalendarData();
@@ -280,7 +291,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   );
 
   const renderEventItem = ({ item }: { item: CalendarEvent }) => (
-    <TouchableOpacity style={styles.eventCard} onPress={() => handleEventPress(item)}>
+    <TouchableOpacity style={[styles.eventCard, dynamicStyles.eventCard]} onPress={() => handleEventPress(item)}>
       <View style={styles.eventHeader}>
         <View style={styles.eventIcon}>
           <Text style={styles.eventIconText}>{getEventIcon(item)}</Text>
@@ -355,14 +366,14 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, contentStyle]}>
         <View>
           <Text style={styles.headerTitle}>Calendar</Text>
           <Text style={styles.headerSubtitle}>Tasks and meetings</Text>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddEvent}>
+        <TouchableOpacity style={[styles.addButton, dynamicStyles.addButton]} onPress={handleAddEvent}>
           <Text style={styles.addButtonText}>+</Text>
         </TouchableOpacity>
       </View>

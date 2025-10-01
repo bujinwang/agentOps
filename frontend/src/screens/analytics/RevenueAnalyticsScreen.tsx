@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 // Mock data for demonstration
 const mockRevenueSummary = {
@@ -30,9 +31,19 @@ const mockCommissionAnalytics = {
 const { width } = Dimensions.get('window');
 
 const RevenueAnalyticsScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d');
+
+  const dynamicStyles = useMemo(() => ({
+    kpiCard: { 
+      width: responsive.getMetricCardWidth(2, 20),
+      minHeight: responsive.getTouchTargetSize(120),
+    },
+    timeRangeButton: { minHeight: responsive.getTouchTargetSize(36) },
+    exportButton: { minHeight: responsive.getTouchTargetSize(44) },
+  }), [responsive]);
 
   // Load analytics data
   const loadAnalyticsData = useCallback(async () => {
@@ -118,7 +129,7 @@ const RevenueAnalyticsScreen: React.FC = () => {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, containerStyle]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -129,7 +140,7 @@ const RevenueAnalyticsScreen: React.FC = () => {
       }
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, contentStyle]}>
         <MaterialCommunityIcons
           name="chart-line-variant"
           size={28}
@@ -158,6 +169,7 @@ const RevenueAnalyticsScreen: React.FC = () => {
               key={range.key}
               style={[
                 styles.timeRangeButton,
+                dynamicStyles.timeRangeButton,
                 timeRange === range.key && styles.timeRangeButtonActive,
               ]}
               onPress={() => setTimeRange(range.key as any)}
@@ -177,7 +189,7 @@ const RevenueAnalyticsScreen: React.FC = () => {
 
       {/* KPI Cards */}
       <View style={styles.kpiContainer}>
-        <View style={[styles.kpiCard, { backgroundColor: '#28a74520' }]}>
+        <View style={[styles.kpiCard, dynamicStyles.kpiCard, { backgroundColor: '#28a74520' }]}>
           <View style={[styles.iconContainer, { backgroundColor: '#28a74530' }]}>
             <MaterialCommunityIcons name="cash-multiple" size={24} color="#28a745" />
           </View>
@@ -327,11 +339,11 @@ const RevenueAnalyticsScreen: React.FC = () => {
 
       {/* Export Actions */}
       <View style={styles.exportContainer}>
-        <TouchableOpacity style={styles.exportButton}>
+        <TouchableOpacity style={[styles.exportButton, dynamicStyles.exportButton]}>
           <MaterialCommunityIcons name="file-pdf-box" size={20} color="#fff" />
           <Text style={styles.exportButtonText}>Export PDF</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.exportButton}>
+        <TouchableOpacity style={[styles.exportButton, dynamicStyles.exportButton]}>
           <MaterialCommunityIcons name="file-excel" size={20} color="#fff" />
           <Text style={styles.exportButtonText}>Export Excel</Text>
         </TouchableOpacity>

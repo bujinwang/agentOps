@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,14 @@ import {
 } from 'react-native';
 import { useNotifications, Notification } from '../../contexts/NotificationContext';
 import { getRelativeTime, formatDateTime } from '../../utils/validation';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface NotificationsScreenProps {
   navigation: any;
 }
 
 const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ navigation }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const {
     notifications,
     unreadCount,
@@ -28,6 +30,15 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ navigation })
 
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    filterButton: { minHeight: responsive.getTouchTargetSize(36) },
+    notificationCard: { 
+      minHeight: responsive.getTouchTargetSize(80),
+      padding: responsive.getSpacing(12),
+    },
+  }), [responsive]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -94,7 +105,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ navigation })
 
   const renderNotificationItem = ({ item }: { item: Notification }) => (
     <TouchableOpacity
-      style={[styles.notificationCard, !item.read && styles.unreadCard]}
+      style={[styles.notificationCard, dynamicStyles.notificationCard, !item.read && styles.unreadCard]}
       onPress={() => handleNotificationPress(item)}
     >
       <View style={styles.notificationHeader}>
@@ -129,7 +140,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ navigation })
   const renderFilterTabs = () => (
     <View style={styles.filterContainer}>
       <TouchableOpacity
-        style={[styles.filterTab, filter === 'all' && styles.activeFilterTab]}
+        style={[styles.filterTab, dynamicStyles.filterButton, filter === 'all' && styles.activeFilterTab]}
         onPress={() => setFilter('all')}
       >
         <Text style={[styles.filterTabText, filter === 'all' && styles.activeFilterTabText]}>
@@ -138,7 +149,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ navigation })
       </TouchableOpacity>
       
       <TouchableOpacity
-        style={[styles.filterTab, filter === 'unread' && styles.activeFilterTab]}
+        style={[styles.filterTab, dynamicStyles.filterButton, filter === 'unread' && styles.activeFilterTab]}
         onPress={() => setFilter('unread')}
       >
         <Text style={[styles.filterTabText, filter === 'unread' && styles.activeFilterTabText]}>
@@ -148,7 +159,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ navigation })
 
       {unreadCount > 0 && (
         <TouchableOpacity
-          style={styles.markAllReadButton}
+          style={[styles.markAllReadButton, dynamicStyles.button]}
           onPress={handleMarkAllRead}
         >
           <Text style={styles.markAllReadText}>Mark All Read</Text>
@@ -186,7 +197,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ navigation })
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Notifications</Text>

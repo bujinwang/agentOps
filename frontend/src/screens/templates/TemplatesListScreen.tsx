@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -10,6 +10,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { MaterialColors, MaterialSpacing, MaterialTypography } from '../../styles/MaterialDesign';
 import { apiService } from '../../services/api';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface Template {
   templateId: number;
@@ -27,12 +28,21 @@ interface Template {
 }
 
 const TemplatesListScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const navigation = useNavigation();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'email' | 'sms'>('all');
   const [categories, setCategories] = useState<string[]>([]);
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    templateCard: { 
+      minHeight: responsive.getTouchTargetSize(100),
+      padding: responsive.getSpacing(12),
+    },
+  }), [responsive]);
 
   useEffect(() => {
     loadTemplates();

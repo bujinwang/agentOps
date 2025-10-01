@@ -1,17 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Card, Button, SegmentedButtons, Chip, IconButton, FAB } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import MLSSyncStatus from '../components/MLSSyncStatus';
 import MLSErrorHandler from '../components/MLSErrorHandler';
 import { MLSError, MLSSyncOptions } from '../types/mls';
+import { useScreenLayout } from '../hooks/useScreenLayout';
 
 const MLSManagementScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState('overview');
   const [syncStatus, setSyncStatus] = useState<any>(null);
   const [errors, setErrors] = useState<MLSError[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+  }), [responsive]);
 
   useEffect(() => {
     loadDashboardData();

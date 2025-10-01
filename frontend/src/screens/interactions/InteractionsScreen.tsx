@@ -1,6 +1,6 @@
 // Interactions/Activity tracking screen
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 import { Interaction, InteractionType, Lead } from '../../types';
 import { apiService } from '../../services/api';
 import { formatDateTime, getRelativeTime } from '../../utils/validation';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface InteractionsScreenProps {
   navigation: any;
@@ -27,6 +28,7 @@ interface InteractionsScreenProps {
 }
 
 const InteractionsScreen: React.FC<InteractionsScreenProps> = ({ navigation, route }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const leadId = route?.params?.leadId;
   const leadName = route?.params?.leadName;
 
@@ -36,6 +38,16 @@ const InteractionsScreen: React.FC<InteractionsScreenProps> = ({ navigation, rou
   const [filter, setFilter] = useState<InteractionType | 'all'>('all');
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [noteContent, setNoteContent] = useState('');
+
+  const dynamicStyles = useMemo(() => ({
+    input: { minHeight: responsive.getTouchTargetSize(100) },
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    filterButton: { minHeight: responsive.getTouchTargetSize(36) },
+    interactionCard: { 
+      minHeight: responsive.getTouchTargetSize(80),
+      padding: responsive.getSpacing(12),
+    },
+  }), [responsive]);
 
   const loadInteractions = useCallback(async (refresh = false) => {
     if (refresh) {
@@ -212,7 +224,7 @@ const InteractionsScreen: React.FC<InteractionsScreenProps> = ({ navigation, rou
         {isAddingNote ? (
           <View style={styles.noteInputContainer}>
             <TextInput
-              style={styles.noteInput}
+              style={[styles.noteInput, dynamicStyles.input]}
               value={noteContent}
               onChangeText={setNoteContent}
               placeholder="Add a note about this lead..."
@@ -223,7 +235,7 @@ const InteractionsScreen: React.FC<InteractionsScreenProps> = ({ navigation, rou
             />
             <View style={styles.noteButtons}>
               <TouchableOpacity
-                style={[styles.noteButton, styles.cancelButton]}
+                style={[styles.noteButton, styles.cancelButton, dynamicStyles.button]}
                 onPress={() => {
                   setIsAddingNote(false);
                   setNoteContent('');
@@ -232,7 +244,7 @@ const InteractionsScreen: React.FC<InteractionsScreenProps> = ({ navigation, rou
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.noteButton, styles.addButton, !noteContent.trim() && styles.disabledButton]}
+                style={[styles.noteButton, styles.addButton, dynamicStyles.button, !noteContent.trim() && styles.disabledButton]}
                 onPress={addNote}
                 disabled={!noteContent.trim()}
               >
@@ -244,7 +256,7 @@ const InteractionsScreen: React.FC<InteractionsScreenProps> = ({ navigation, rou
           </View>
         ) : (
           <TouchableOpacity
-            style={styles.addNoteButton}
+            style={[styles.addNoteButton, dynamicStyles.button]}
             onPress={() => setIsAddingNote(true)}
           >
             <Text style={styles.addNoteButtonIcon}>📝</Text>
@@ -260,9 +272,9 @@ const InteractionsScreen: React.FC<InteractionsScreenProps> = ({ navigation, rou
     : interactions.filter(interaction => interaction.type === filter);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, contentStyle]}>
         <Text style={styles.headerTitle}>
           {leadName ? `${leadName} - Activity` : 'Activity Timeline'}
         </Text>

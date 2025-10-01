@@ -1,6 +1,6 @@
 // Profile screen with user information and logout
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,23 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 const ProfileScreen: React.FC = () => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const { user, logout, isLoading } = useAuth();
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    avatar: { 
+      width: responsive.getTouchTargetSize(100),
+      height: responsive.getTouchTargetSize(100),
+    },
+    menuItem: { 
+      minHeight: responsive.getTouchTargetSize(56),
+      padding: responsive.getSpacing(16),
+    },
+  }), [responsive]);
 
   const handleLogout = () => {
     Alert.alert(
@@ -40,11 +54,11 @@ const ProfileScreen: React.FC = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
+    <ScrollView style={[styles.container, containerStyle]}>
+      <View style={[styles.content, contentStyle]}>
         {/* Profile Header */}
         <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
+          <View style={[styles.avatar, dynamicStyles.avatar]}>
             <Text style={styles.avatarText}>
               {user?.firstName?.charAt(0) || '?'}{user?.lastName?.charAt(0) || '?'}
             </Text>
@@ -99,17 +113,17 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Actions</Text>
           
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity style={[styles.actionButton, dynamicStyles.menuItem]}>
             <Text style={styles.actionButtonText}>📱 App Settings</Text>
             <Text style={styles.actionButtonSubtext}>Coming Soon</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity style={[styles.actionButton, dynamicStyles.menuItem]}>
             <Text style={styles.actionButtonText}>📧 Contact Support</Text>
             <Text style={styles.actionButtonSubtext}>Coming Soon</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity style={[styles.actionButton, dynamicStyles.menuItem]}>
             <Text style={styles.actionButtonText}>📋 Privacy Policy</Text>
             <Text style={styles.actionButtonSubtext}>Coming Soon</Text>
           </TouchableOpacity>
@@ -118,7 +132,7 @@ const ProfileScreen: React.FC = () => {
         {/* Logout Section */}
         <View style={styles.section}>
           <TouchableOpacity
-            style={styles.logoutButton}
+            style={[styles.logoutButton, dynamicStyles.button]}
             onPress={handleLogout}
             disabled={isLoading}
           >

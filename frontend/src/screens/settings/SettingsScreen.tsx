@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,14 +11,21 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 interface SettingsScreenProps {
   navigation: any;
 }
 
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout();
   const { settings, profile, isLoading, updateSettings, resetSettings, exportData, deleteAccount } = useSettings();
   const [isSaving, setIsSaving] = useState(false);
+
+  const dynamicStyles = useMemo(() => ({
+    button: { minHeight: responsive.getTouchTargetSize(44) },
+    settingRow: { minHeight: responsive.getTouchTargetSize(56) },
+  }), [responsive]);
 
   const handleSettingChange = async (category: string, key: string, value: any) => {
     try {
@@ -203,8 +210,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+    <View style={[styles.container, containerStyle]}>
+      <ScrollView contentContainerStyle={[styles.scrollContainer, contentStyle]}>
         {/* Profile Section */}
         {renderSection('Profile', (
           <TouchableOpacity
