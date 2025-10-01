@@ -1,7 +1,7 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,11 +17,15 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { RegisterForm } from '../../types';
 import { validateRegisterForm, getErrorMessage, hasError } from '../../utils/validation';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 
 type RegisterScreenProps = StackScreenProps<AuthStackParamList, 'Register'>;
 
 const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
   const { register, isLoading } = useAuth();
+  const { containerStyle, contentStyle, responsive, theme } = useScreenLayout({
+    maxWidth: { tablet: 560, desktop: 640 },
+  });
   
   const [formData, setFormData] = useState<RegisterForm>({
     email: '',
@@ -98,15 +102,33 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
     navigation.navigate('Login');
   };
 
+  const dynamicStyles = useMemo(() => ({
+    title: {
+      fontSize: responsive.getResponsiveFontSize(28),
+      color: theme.colors.primary,
+    },
+    subtitle: {
+      fontSize: responsive.getResponsiveFontSize(16),
+      color: theme.colors.onSurfaceVariant,
+    },
+    input: {
+      minHeight: responsive.getTouchTargetSize(48),
+      fontSize: responsive.getResponsiveFontSize(16),
+    },
+    button: {
+      minHeight: responsive.getTouchTargetSize(48),
+    },
+  }), [responsive, theme]);
+
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, containerStyle]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.content}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join Real Estate CRM</Text>
+        <View style={[styles.content, contentStyle]}>
+          <Text style={[styles.title, dynamicStyles.title]}>Create Account</Text>
+          <Text style={[styles.subtitle, dynamicStyles.subtitle]}>Join Real Estate CRM</Text>
 
           <View style={styles.form}>
             <View style={styles.row}>
@@ -115,6 +137,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
                 <TextInput
                   style={[
                     styles.input,
+                    dynamicStyles.input,
                     hasError(errors, 'firstName') && styles.inputError,
                   ]}
                   value={formData.firstName}
@@ -135,6 +158,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
                 <TextInput
                   style={[
                     styles.input,
+                    dynamicStyles.input,
                     hasError(errors, 'lastName') && styles.inputError,
                   ]}
                   value={formData.lastName}
@@ -156,6 +180,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
               <TextInput
                 style={[
                   styles.input,
+                  dynamicStyles.input,
                   hasError(errors, 'email') && styles.inputError,
                 ]}
                 value={formData.email}
@@ -178,6 +203,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
               <TextInput
                 style={[
                   styles.input,
+                  dynamicStyles.input,
                   hasError(errors, 'password') && styles.inputError,
                 ]}
                 value={formData.password}
@@ -197,6 +223,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
             <TouchableOpacity
               style={[
                 styles.registerButton,
+                dynamicStyles.button,
                 (isSubmitting || isLoading) && styles.buttonDisabled,
               ]}
               onPress={handleRegister}

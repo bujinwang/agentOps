@@ -1,6 +1,6 @@
 // Leads list screen with enhanced Material Design BMAD principles
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import MaterialFAB from '../../components/MaterialFAB';
 import { BusinessIcon } from '../../components/MaterialIcon';
 import { LeadListSkeleton } from '../../components/common/SkeletonList';
 import { useLoadingState } from '../../utils/loadingState';
+import { useScreenLayout } from '../../hooks/useScreenLayout';
 import {
   MaterialColors,
   MaterialElevation,
@@ -34,6 +35,7 @@ interface LeadsListScreenProps {
 }
 
 const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
+  const { containerStyle, responsive, theme } = useScreenLayout();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<LeadStatus | undefined>();
@@ -45,6 +47,17 @@ const LeadsListScreen: React.FC<LeadsListScreenProps> = ({ navigation }) => {
   // Enhanced loading state management
   const loadingState = useLoadingState();
   const refreshLoadingState = useLoadingState();
+
+  const dynamicStyles = useMemo(() => ({
+    searchInput: {
+      minHeight: responsive.getTouchTargetSize(44),
+      fontSize: responsive.getResponsiveFontSize(16),
+    },
+    filterButton: {
+      minHeight: responsive.getTouchTargetSize(36),
+      paddingHorizontal: responsive.getResponsiveSpacing(12),
+    },
+  }), [responsive]);
 
   const renderHeader = () => (
     <View style={styles.header}>
