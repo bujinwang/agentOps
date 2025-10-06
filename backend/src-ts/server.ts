@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import app from './app';
 import { connectDatabase } from './config/database';
+import { mlsSyncJob } from './jobs/mls-sync.job';
 
 // Load environment variables
 dotenv.config();
@@ -12,6 +13,14 @@ async function startServer() {
     // Connect to database
     await connectDatabase();
     console.log('✅ Database connected successfully');
+
+    // Start MLS sync job (only in production or if explicitly enabled)
+    if (process.env.NODE_ENV === 'production' || process.env.ENABLE_MLS_SYNC === 'true') {
+      mlsSyncJob.start();
+      console.log('✅ MLS sync job started');
+    } else {
+      console.log('ℹ️  MLS sync job disabled (set ENABLE_MLS_SYNC=true to enable)');
+    }
 
     // Start server
     app.listen(PORT, () => {
