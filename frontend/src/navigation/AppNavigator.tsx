@@ -14,7 +14,12 @@ import LeadsListScreen from '../screens/leads/LeadsListScreen';
 import LeadDetailScreen from '../screens/leads/LeadDetailScreen';
 import AddLeadScreen from '../screens/leads/AddLeadScreen';
 import EditLeadScreen from '../screens/leads/EditLeadScreen';
+
+// Import task screens
 import TasksScreen from '../screens/tasks/TasksScreen';
+import AddTaskScreen from '../screens/tasks/AddTaskScreen';
+import TaskDetailScreen from '../screens/tasks/TaskDetailScreen';
+
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import AnalyticsScreen from '../screens/analytics/AnalyticsScreen';
 import LoadingScreen from '../screens/LoadingScreen';
@@ -51,27 +56,54 @@ const LeadsStackNavigator = () => (
       headerTitleStyle: { fontWeight: 'bold' },
     }}
   >
-    <LeadsStack.Screen 
-      name="LeadsList" 
-      component={LeadsListScreen} 
+    <LeadsStack.Screen
+      name="LeadsList"
+      component={LeadsListScreen}
       options={{ title: 'My Leads' }}
     />
-    <LeadsStack.Screen 
-      name="LeadDetail" 
-      component={LeadDetailScreen} 
+    <LeadsStack.Screen
+      name="LeadDetail"
+      component={LeadDetailScreen}
       options={{ title: 'Lead Details' }}
     />
-    <LeadsStack.Screen 
-      name="AddLead" 
-      component={AddLeadScreen} 
+    <LeadsStack.Screen
+      name="AddLead"
+      component={AddLeadScreen}
       options={{ title: 'Add New Lead' }}
     />
-    <LeadsStack.Screen 
-      name="EditLead" 
-      component={EditLeadScreen} 
+    <LeadsStack.Screen
+      name="EditLead"
+      component={EditLeadScreen}
       options={{ title: 'Edit Lead' }}
     />
   </LeadsStack.Navigator>
+);
+
+// Tasks stack navigator
+const TasksStackNavigator = () => (
+  <TasksStack.Navigator
+    screenOptions={{
+      headerStyle: { backgroundColor: MaterialColors.primary[500] },
+      headerTintColor: MaterialColors.onPrimary,
+      headerTitleStyle: { fontWeight: 'bold' },
+    }}
+  >
+    <TasksStack.Screen
+      name="TasksList"
+      component={TasksScreen}
+      options={{ title: 'My Tasks' }}
+    />
+    <TasksStack.Screen
+      name="TaskDetail"
+      component={TaskDetailScreen}
+      options={{ title: 'Task Details' }}
+    />
+    <TasksStack.Screen
+      name="AddTask"
+      component={AddTaskScreen}
+      options={{ title: 'Add New Task' }}
+    />
+  </TasksStack.Navigator>
 );
 
 // Auth stack navigator
@@ -132,9 +164,9 @@ const MainNavigator = () => (
     />
     <Tab.Screen
       name="Tasks"
-      component={TasksScreen}
+      component={TasksStackNavigator}
       options={{
-        title: 'My Tasks',
+        headerShown: false,
         tabBarLabel: 'Tasks',
         tabBarIcon: ({ color, focused }) => (
           <NavigationIcon
