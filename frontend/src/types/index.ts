@@ -234,6 +234,7 @@ export type TasksStackParamList = {
   TasksList: undefined;
   TaskDetail: { taskId: number };
   AddTask: undefined;
+  EditTask: { taskId: number };
 };
 
 export type ProfileStackParamList = {

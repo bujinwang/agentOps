@@ -18,6 +18,7 @@ import EditLeadScreen from '../screens/leads/EditLeadScreen';
 // Import task screens
 import TasksScreen from '../screens/tasks/TasksScreen';
 import AddTaskScreen from '../screens/tasks/AddTaskScreen';
+import EditTaskScreen from '../screens/tasks/EditTaskScreen';
 import TaskDetailScreen from '../screens/tasks/TaskDetailScreen';
 
 import ProfileScreen from '../screens/profile/ProfileScreen';
@@ -102,6 +103,11 @@ const TasksStackNavigator = () => (
       name="AddTask"
       component={AddTaskScreen}
       options={{ title: 'Add New Task' }}
+    />
+    <TasksStack.Screen
+      name="EditTask"
+      component={EditTaskScreen}
+      options={{ title: 'Edit Task' }}
     />
   </TasksStack.Navigator>
 );
